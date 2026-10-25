@@ -4,6 +4,8 @@
 //   SOLANA_RPC_URL       optional, your own RPC (Helius, Triton...). Without it, free public RPCs
 //   WATCH_INTERVAL_MIN   optional, minutes between watch checks (default 15)
 //   MAX_WATCHES          optional, per chat (default 10)
+//   PRICE_INTERVAL_MIN   optional, minutes between price alert checks (default 2)
+//   MAX_PRICE_ALERTS     optional, per chat (default 10)
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -25,6 +27,8 @@ loadEnv(join(root, ".env"));
 
 const intervalMin = Number(process.env.WATCH_INTERVAL_MIN) || 15;
 const maxWatches = Number(process.env.MAX_WATCHES) || 10;
+const priceMin = Number(process.env.PRICE_INTERVAL_MIN) || 2;
+const maxPrices = Number(process.env.MAX_PRICE_ALERTS) || 10;
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
 if (!process.env.TELEGRAM_BOT_TOKEN) {
@@ -35,10 +39,10 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
 const telegram = createTelegram(process.env.TELEGRAM_BOT_TOKEN);
 const store = createStore(join(root, "data", "store.json"));
 const scanner = createScanner({ rpcUrl: process.env.SOLANA_RPC_URL });
-const bot = createBot({ telegram, store, scanner, intervalMin, maxWatches, log });
+const bot = createBot({ telegram, store, scanner, intervalMin, maxWatches, priceMin, maxPrices, log });
 
 const me = await telegram.call("getMe");
-log(`bot @${me.username} listo · RPC ${scanner.client.ownRpc() ? "propio" : "gratuito"} · vigilancia cada ${intervalMin} min`);
+log(`bot @${me.username} listo · RPC ${scanner.client.ownRpc() ? "propio" : "gratuito"} · vigilancia cada ${intervalMin} min · precios cada ${priceMin} min`);
 
 // Watch loop: one pass at a time, never overlapping
 let cycleRunning = false;
@@ -53,6 +57,18 @@ async function cycle() {
 }
 setInterval(cycle, intervalMin * 60000);
 setTimeout(cycle, 20000);
+
+// Price loop: much lighter (one DexScreener request per 30 tokens), so it runs more often
+let priceRunning = false;
+setInterval(async () => {
+  if (priceRunning) return;
+  priceRunning = true;
+  try {
+    const r = await bot.runPriceCycle();
+    if (r.alerts) log(`precios: ${r.checked} tokens, ${r.alerts} avisos`);
+  } catch (e) { log("precios falló", e.message); }
+  finally { priceRunning = false; }
+}, priceMin * 60000);
 
 // Message loop. Each message is handled in the background so a slow analysis never blocks the others.
 for (;;) {

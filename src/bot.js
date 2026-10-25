@@ -3,11 +3,13 @@ import { escapeHtml as esc } from "./telegram.js";
 import { t } from "./texts.js";
 import { formatToken, formatWallet, short, tokenLabel } from "./format.js";
 import { tokenState, diffToken, formatTokenAlert, walletMoves, formatWalletAlert, formatCreatorAlert } from "./watch.js";
+import { parseCondition, checkAlert, getPrices, priceText } from "./price.js";
 
 const COMMANDS = {
   start: "help", help: "help", ayuda: "help",
   token: "analyze", wallet: "analyze", analizar: "analyze", scan: "analyze",
   vigilar: "watch", watch: "watch",
+  precio: "price", price: "price", alerta: "price", alert: "price",
   dejar: "unwatch", unwatch: "unwatch",
   lista: "list", list: "list",
   idioma: "lang", lang: "lang", language: "lang"
@@ -27,11 +29,14 @@ export function parse(text) {
  * @param deps.scanner    createScanner(...) from solana-risk-engine
  * @param deps.intervalMin  minutes between watch checks (for the texts)
  * @param deps.maxWatches   per chat
+ * @param deps.priceMin   minutes between price checks (for the texts)
+ * @param deps.maxPrices  price alerts per chat
  * @param deps.log        optional logger
  */
 export function createBot(deps) {
   const { telegram, store, scanner } = deps;
   const intervalMin = deps.intervalMin || 15, maxWatches = deps.maxWatches || 10;
+  const priceMin = deps.priceMin || 2, maxPrices = deps.maxPrices || 10;
   const log = deps.log || (() => {});
   const ownRpc = () => scanner.client.ownRpc();
 
@@ -110,13 +115,57 @@ export function createBot(deps) {
     return reply(chatId, T.unwatched(esc(w.label)));
   }
 
+  function condText(a, lang) {
+    const C = t(lang).cond;
+    return a.kind === "move" ? C.move(a.value) : C[a.kind](priceText(a.value, lang));
+  }
+
+  function priceLines(chat, lang) {
+    const T = t(lang);
+    return [T.priceListHead, ...chat.prices.map((a) => "• " + T.priceListRow(esc(a.label), condText(a, lang)))];
+  }
+
+  // /precio <token> <condition> | /precio <token> quitar | /precio <token> | /precio
+  async function price(chatId, arg, lang) {
+    const T = t(lang), chat = store.chat(chatId);
+    const [addr = "", ...rest] = arg.split(/\s+/).filter(Boolean);
+    const cond = rest.join("");
+    if (!addr) return reply(chatId, chat.prices.length ? priceLines(chat, lang).join("\n") : T.priceUsage);
+    if (!ADDRESS_RE.test(addr)) return reply(chatId, T.invalid);
+    if (/^(quitar|borrar|off|stop|remove|delete)$/i.test(cond)) {
+      const mine = chat.prices.filter((a) => a.mint === addr);
+      if (!mine.length) return reply(chatId, T.priceNone);
+      chat.prices = chat.prices.filter((a) => a.mint !== addr);
+      store.save();
+      return reply(chatId, T.priceOff(esc(mine[0].label), mine.length));
+    }
+    let now;
+    try { now = (await getPrices(scanner.client, [addr]))[addr]; }
+    catch (e) { return reply(chatId, "❌ " + esc(describeError(e, lang, { ownRpc: ownRpc() }))); }
+    if (!now) return reply(chatId, T.priceNoMarket);
+    const b = now.pair.baseToken || {};
+    const label = b.symbol ? "$" + b.symbol : short(addr);
+    const p = priceText(now.price, lang);
+    if (!cond) return reply(chatId, T.priceNow(esc(label), p) + "\n\n" + T.priceUsage);
+    const c = parseCondition(cond, now.price);
+    if (!c) return reply(chatId, T.priceBadCond);
+    if (chat.prices.some((a) => a.mint === addr && a.kind === c.kind && Math.abs(a.value - c.value) <= c.value * 1e-9)) return reply(chatId, T.priceExists);
+    if (chat.prices.length >= maxPrices) return reply(chatId, T.priceLimit(maxPrices));
+    const a = { mint: addr, label, kind: c.kind, value: c.value, ref: now.price, since: Date.now() };
+    chat.prices.push(a);
+    store.save();
+    return reply(chatId, T.priceSet(esc(label), condText(a, lang), p));
+  }
+
   function list(chatId, lang) {
     const T = t(lang), chat = store.chat(chatId);
-    if (!chat.watches.length) return reply(chatId, T.listEmpty);
+    if (!chat.watches.length && !chat.prices.length) return reply(chatId, T.listEmpty);
     const d = (ts) => new Date(ts).toLocaleDateString(lang === "es" ? "es-ES" : "en-GB");
-    return reply(chatId, [T.listHead, ...chat.watches.map((w, i) =>
+    const lines = chat.watches.length ? [T.listHead, ...chat.watches.map((w, i) =>
       `${i + 1}. <b>${esc(w.label)}</b> (${w.kind === "token" ? T.kindToken : T.kindWallet}) · ${T.since} ${d(w.since)}\n<code>${w.addr}</code>` +
-      (w.creator ? "\n" + T.listCreator(short(w.creator.addr)) : ""))].join("\n"));
+      (w.creator ? "\n" + T.listCreator(short(w.creator.addr)) : ""))] : [];
+    if (chat.prices.length) lines.push(...(lines.length ? [""] : []), ...priceLines(chat, lang));
+    return reply(chatId, lines.join("\n"));
   }
 
   async function handleMessage(msg) {
@@ -128,9 +177,10 @@ export function createBot(deps) {
       case "help":
         // t.me/<bot>?start=<address> (the scanner's "Vigilar en Telegram" button) arrives as "/start <address>"
         if (ADDRESS_RE.test(first)) return watch(chatId, first, lang);
-        return reply(chatId, t(lang).help(intervalMin, maxWatches));
+        return reply(chatId, t(lang).help(intervalMin, maxWatches, priceMin));
       case "analyze": return first ? analyze(chatId, first, lang) : reply(chatId, t(lang).needAddr);
       case "watch": return watch(chatId, first, lang);
+      case "price": return price(chatId, arg, lang);
       case "unwatch": return unwatch(chatId, first, lang);
       case "list": return list(chatId, lang);
       case "lang": {
@@ -142,8 +192,39 @@ export function createBot(deps) {
       default:
         // plain text: analyse it if it looks like an address, otherwise show the help
         if (ADDRESS_RE.test(first)) return analyze(chatId, first, lang);
-        return reply(chatId, t(lang).help(intervalMin, maxWatches));
+        return reply(chatId, t(lang).help(intervalMin, maxWatches, priceMin));
     }
+  }
+
+  /**
+   * One pass over every price alert: one DexScreener request per 30 tokens, whatever the number of
+   * chats. A price that can't be read this time is skipped, never alerted.
+   */
+  async function runPriceCycle() {
+    const all = store.allPrices();
+    if (!all.length) return { checked: 0, alerts: 0 };
+    const mints = [...new Set(all.map((x) => x.alert.mint))];
+    let prices;
+    try { prices = await getPrices(scanner.client, mints); }
+    catch (e) { log("price check failed", e.code || e.message); return { checked: 0, alerts: 0 }; }
+    let alerts = 0;
+    const done = new Set();
+    for (const { chatId, alert: a } of all) {
+      const now = prices[a.mint], ev = now && checkAlert(a, now.price);
+      if (!ev) continue;
+      const lang = store.chat(chatId).lang, T = t(lang), P = (v) => priceText(v, lang), L = esc(a.label);
+      const lines = [];
+      if (ev.kind === "above") lines.push(T.alertAbove(L, P(a.value), P(ev.to)), T.priceDone);
+      else if (ev.kind === "below") lines.push(T.alertBelow(L, P(a.value), P(ev.to)), T.priceDone);
+      else lines.push((ev.kind === "up" ? T.alertUp : T.alertDown)(L, ev.pct, P(ev.from), P(ev.to)), T.priceNext(a.value));
+      if (now.pair.pairAddress) lines.push(`<a href="https://dexscreener.com/solana/${now.pair.pairAddress}">DexScreener</a>`);
+      await reply(chatId, lines.join("\n"));
+      alerts++;
+      if (a.kind === "move") a.ref = ev.to; else done.add(a);
+    }
+    if (done.size) for (const id of Object.keys(store.data.chats)) store.chat(id).prices = store.chat(id).prices.filter((a) => !done.has(a));
+    if (alerts) store.save();
+    return { checked: Object.keys(prices).length, alerts };
   }
 
   /**
@@ -199,5 +280,5 @@ export function createBot(deps) {
     return { checked: cache.size, alerts };
   }
 
-  return { handleMessage, runWatchCycle, parse };
+  return { handleMessage, runWatchCycle, runPriceCycle, parse };
 }

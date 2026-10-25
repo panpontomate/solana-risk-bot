@@ -1,18 +1,19 @@
 // The bot's own texts. Risk explanations come from solana-risk-engine's i18n, not from here.
 export const TEXTS = {
   es: {
-    help: (n, max) => [
+    help: (n, max, pn) => [
       "🔎 <b>Escáner de riesgo de Solana</b>",
       "",
       "Pégame la dirección de un <b>token</b> o de una <b>wallet</b> y te digo su riesgo, con el motivo de cada aviso.",
       "",
       "<b>Comandos</b>",
       "/vigilar <i>dirección</i>: te aviso si algo cambia. En un token: más riesgo, señales nuevas o caída de liquidez, y también vigilo a su creador (🚨 si vende el token). En una wallet: lo que compra o vende.",
-      "/lista: lo que estás vigilando",
+      "/precio <i>token</i> &gt;1,5 · &lt;0,8 · 20%: alerta de precio, al subir o bajar de un precio o cada vez que se mueva un 20%",
+      "/lista: lo que estás vigilando y tus alertas de precio",
       "/dejar <i>dirección o número</i>: dejar de vigilar",
       "/idioma en: switch to English",
       "",
-      `Reviso lo vigilado cada ${n} min. Máximo ${max} por chat.`,
+      `Reviso lo vigilado cada ${n} min y los precios cada ${pn} min. Máximo ${max} por chat.`,
       "<i>Herramienta heurística, no es consejo financiero: «riesgo bajo» significa que no encontré las señales que busco, no que sea seguro.</i>"
     ].join("\n"),
     analyzing: "⏳ Analizando… con los RPC gratuitos puede tardar hasta un minuto.",
@@ -43,6 +44,35 @@ export const TEXTS = {
     alertCreator: (label, c) => `👤 <b>El creador de ${label} se ha movido</b> (${c})`,
     creatorDumping: (label) => `🚨 <b>Está vendiendo el propio ${label}</b>`,
     listCreator: (c) => `   + creador ${c}`,
+    priceUsage: [
+      "💲 <b>Alertas de precio</b>",
+      "/precio <i>token</i> &gt;1,5: aviso cuando suba de 1,5 $",
+      "/precio <i>token</i> &lt;0,8: aviso cuando baje de 0,8 $",
+      "/precio <i>token</i> 20%: aviso cada vez que se mueva un 20% (arriba o abajo)",
+      "/precio <i>token</i> &gt;50%: aviso cuando suba un 50% desde ahora",
+      "/precio <i>token</i> quitar: borrar sus alertas"
+    ].join("\n"),
+    priceNow: (label, p) => `💲 <b>${label}</b> vale ahora <b>${p}</b>.`,
+    priceBadCond: "No entiendo ese precio. Prueba con &gt;1,5, &lt;0,8 o 20% (los porcentajes, de 1% a 1000%).",
+    priceNoMarket: "No encuentro mercado para eso, así que no puedo seguir su precio. ¿Es la dirección de un token?",
+    priceLimit: (max) => `Ya tienes ${max} alertas de precio, que es el máximo. Quita alguna con /precio <i>token</i> quitar.`,
+    priceExists: "Ya tenías esa alerta.",
+    priceSet: (label, cond, p) => `💲 Te aviso cuando <b>${label}</b> ${cond}. Ahora vale ${p}.`,
+    cond: {
+      above: (v) => `suba de <b>${v}</b>`,
+      below: (v) => `baje de <b>${v}</b>`,
+      move: (pct) => `se mueva un <b>${pct}%</b> (arriba o abajo; luego vuelvo a contar desde el precio nuevo)`
+    },
+    priceOff: (label, n) => `Quitadas ${n} alertas de precio de <b>${label}</b>.`,
+    priceNone: "No tenías alertas de precio para eso.",
+    priceListHead: "💲 <b>Alertas de precio</b>",
+    priceListRow: (label, cond) => `<b>${label}</b>: cuando ${cond}`,
+    alertAbove: (label, v, p) => `🚀 <b>${label} ha subido de ${v}</b>: ahora ${p}`,
+    alertBelow: (label, v, p) => `📉 <b>${label} ha bajado de ${v}</b>: ahora ${p}`,
+    alertUp: (label, pct, a, b) => `📈 <b>${label} ha subido un ${pct}%</b> (${a} → ${b})`,
+    alertDown: (label, pct, a, b) => `📉 <b>${label} ha bajado un ${pct}%</b> (${a} → ${b})`,
+    priceDone: "<i>Alerta cumplida, ya la he quitado.</i>",
+    priceNext: (pct) => `<i>Te vuelvo a avisar si se mueve otro ${pct}%.</i>`,
     walletHead: (addr, sol, n) => `👛 <b>Wallet ${addr}</b> · ${sol} SOL · ${n} tokens`,
     walletEmpty: "No tiene tokens.",
     walletRest: (n) => `…y ${n} más sin señales relevantes.`,
@@ -53,18 +83,19 @@ export const TEXTS = {
     error: "No he podido completar el análisis."
   },
   en: {
-    help: (n, max) => [
+    help: (n, max, pn) => [
       "🔎 <b>Solana risk scanner</b>",
       "",
       "Paste a <b>token</b> or <b>wallet</b> address and I'll tell you its risk, with the reason behind every warning.",
       "",
       "<b>Commands</b>",
       "/watch <i>address</i>: I'll alert you when something changes. For a token: higher risk, new signals or a liquidity drop, and I also watch its creator (🚨 if they sell it). For a wallet: what it buys or sells.",
-      "/list: what you're watching",
+      "/price <i>token</i> &gt;1.5 · &lt;0.8 · 20%: price alert, when it goes above or below a price or every time it moves 20%",
+      "/list: what you're watching and your price alerts",
       "/unwatch <i>address or number</i>: stop watching",
       "/lang es: cambiar a español",
       "",
-      `I check watched items every ${n} min. Up to ${max} per chat.`,
+      `I check watched items every ${n} min and prices every ${pn} min. Up to ${max} per chat.`,
       "<i>Heuristic tool, not financial advice: \"low risk\" means I found none of the signals I look for, not that it is safe.</i>"
     ].join("\n"),
     analyzing: "⏳ Analysing… with free RPCs this can take up to a minute.",
@@ -95,6 +126,35 @@ export const TEXTS = {
     alertCreator: (label, c) => `👤 <b>The creator of ${label} moved</b> (${c})`,
     creatorDumping: (label) => `🚨 <b>They are selling ${label} itself</b>`,
     listCreator: (c) => `   + creator ${c}`,
+    priceUsage: [
+      "💲 <b>Price alerts</b>",
+      "/price <i>token</i> &gt;1.5: alert when it goes above $1.5",
+      "/price <i>token</i> &lt;0.8: alert when it goes below $0.8",
+      "/price <i>token</i> 20%: alert every time it moves 20% (up or down)",
+      "/price <i>token</i> &gt;50%: alert when it is up 50% from now",
+      "/price <i>token</i> off: remove its alerts"
+    ].join("\n"),
+    priceNow: (label, p) => `💲 <b>${label}</b> is now <b>${p}</b>.`,
+    priceBadCond: "I don't understand that price. Try &gt;1.5, &lt;0.8 or 20% (percentages from 1% to 1000%).",
+    priceNoMarket: "I can't find a market for that, so I can't follow its price. Is it a token address?",
+    priceLimit: (max) => `You already have ${max} price alerts, the maximum. Remove one with /price <i>token</i> off.`,
+    priceExists: "You already had that alert.",
+    priceSet: (label, cond, p) => `💲 I'll alert you when <b>${label}</b> ${cond}. It is now ${p}.`,
+    cond: {
+      above: (v) => `goes above <b>${v}</b>`,
+      below: (v) => `goes below <b>${v}</b>`,
+      move: (pct) => `moves <b>${pct}%</b> (up or down; then I count again from the new price)`
+    },
+    priceOff: (label, n) => `Removed ${n} price alerts for <b>${label}</b>.`,
+    priceNone: "You had no price alerts for that.",
+    priceListHead: "💲 <b>Price alerts</b>",
+    priceListRow: (label, cond) => `<b>${label}</b>: when it ${cond}`,
+    alertAbove: (label, v, p) => `🚀 <b>${label} went above ${v}</b>: now ${p}`,
+    alertBelow: (label, v, p) => `📉 <b>${label} went below ${v}</b>: now ${p}`,
+    alertUp: (label, pct, a, b) => `📈 <b>${label} is up ${pct}%</b> (${a} → ${b})`,
+    alertDown: (label, pct, a, b) => `📉 <b>${label} is down ${pct}%</b> (${a} → ${b})`,
+    priceDone: "<i>Alert met, I've removed it.</i>",
+    priceNext: (pct) => `<i>I'll alert you again if it moves another ${pct}%.</i>`,
     walletHead: (addr, sol, n) => `👛 <b>Wallet ${addr}</b> · ${sol} SOL · ${n} tokens`,
     walletEmpty: "It holds no tokens.",
     walletRest: (n) => `…and ${n} more with no relevant signals.`,

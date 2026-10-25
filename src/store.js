@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "
 import { dirname } from "node:path";
 
 // Everything the bot remembers, in one JSON file: per chat, its language and what it watches.
-// { offset, chats: { [chatId]: { lang, watches: [{ kind, addr, label, state, since }] } } }
+// { offset, chats: { [chatId]: { lang, watches: [{ kind, addr, label, state, since }], prices: [see price.js] } } }
 export function createStore(path) {
   let data = { offset: 0, chats: {} };
   if (path && existsSync(path)) {
@@ -18,7 +18,9 @@ export function createStore(path) {
   }
 
   function chat(id) {
-    return data.chats[id] || (data.chats[id] = { lang: "es", watches: [] });
+    const c = data.chats[id] || (data.chats[id] = { lang: "es", watches: [] });
+    if (!c.prices) c.prices = [];   // chats saved before price alerts existed
+    return c;
   }
 
   return {
@@ -30,6 +32,11 @@ export function createStore(path) {
     allWatches() {
       const out = [];
       for (const id of Object.keys(data.chats)) for (const w of data.chats[id].watches) out.push({ chatId: id, watch: w });
+      return out;
+    },
+    allPrices() {
+      const out = [];
+      for (const id of Object.keys(data.chats)) for (const a of chat(id).prices) out.push({ chatId: id, alert: a });
       return out;
     }
   };

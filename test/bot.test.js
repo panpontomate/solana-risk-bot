@@ -5,6 +5,7 @@ import { createStore } from "../src/store.js";
 import { splitMessage, escapeHtml } from "../src/telegram.js";
 import { tokenState, diffToken, walletMoves } from "../src/watch.js";
 import { formatToken, formatWallet } from "../src/format.js";
+import { parseCondition, checkAlert, priceText } from "../src/price.js";
 
 const MINT = "orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE";
 const WALLET = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
@@ -32,6 +33,15 @@ function fakeScanner(state) {
       rpc: async (method, params) => {
         if (method === "getAccountInfo") return params[0] === MINT ? { value: { owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", data: { parsed: { type: "mint" } } } } : { value: null };
         throw new Error("unexpected " + method);
+      },
+      // DexScreener, which is where prices come from: state.prices = { mint: priceUsd }, or "down"
+      jfetch: async (url) => {
+        state.dexCalls = (state.dexCalls || 0) + 1;
+        if (state.prices === "down") { const e = new Error("x"); e.code = "HTTP"; throw e; }
+        const mints = url.split("/").pop().split(",");
+        return mints.filter((m) => state.prices && state.prices[m]).map((m) => ({
+          baseToken: { address: m, symbol: m === MINT ? "ORCA" : "OTHER" }, priceUsd: String(state.prices[m]), pairAddress: "PAIR1", liquidity: { usd: 500000 }
+        }));
       },
       // RugCheck's full report, which is where the creator comes from
       softJson: async (url) => { state.rcCalls = (state.rcCalls || 0) + 1; return url.endsWith(MINT + "/report") && state.creator ? { creator: state.creator } : null; }
@@ -252,7 +262,111 @@ test("errors from the engine become friendly messages", async () => {
   assert.match(tg.last(), /❌ No se pudo conectar con DexScreener/);
 });
 
+test("price alerts: set, list, cross a target once and remove", async () => {
+  const state = { prices: { [MINT]: 1.2 } };
+  const { telegram, msg, bot, store } = setup(state);
+  await msg("/precio");
+  assert.match(telegram.last(), /Alertas de precio/);
+  await msg("/precio " + MINT);
+  assert.match(telegram.last(), /\$ORCA<\/b> vale ahora <b>1,20 \$/);
+  await msg("/precio " + MINT + " > 1,5");
+  assert.match(telegram.last(), /Te aviso cuando <b>\$ORCA<\/b> suba de <b>1,50 \$<\/b>\. Ahora vale 1,20 \$/);
+  await msg("/precio " + MINT + " >1.5");
+  assert.equal(telegram.last(), "Ya tenías esa alerta.");
+  await msg("/precio " + MINT + " 1");   // a bare number below the price is a "goes below" target
+  assert.match(telegram.last(), /baje de <b>1,00 \$/);
+  await msg("/lista");
+  assert.match(telegram.last(), /^💲 <b>Alertas de precio<\/b>/);
+  assert.match(telegram.last(), /\$ORCA<\/b>: cuando suba de <b>1,50 \$/);
+
+  telegram.sent.length = 0;
+  assert.equal((await bot.runPriceCycle()).alerts, 0);
+  state.prices[MINT] = 1.6;
+  assert.equal((await bot.runPriceCycle()).alerts, 1);
+  assert.match(telegram.last(), /🚀 <b>\$ORCA ha subido de 1,50 \$<\/b>: ahora 1,60 \$/);
+  assert.match(telegram.last(), /Alerta cumplida/);
+  assert.match(telegram.last(), /dexscreener\.com\/solana\/PAIR1/);
+  // fired once: removed, the "below" one stays
+  assert.deepEqual(store.chat("1").prices.map((a) => a.kind), ["below"]);
+  assert.equal((await bot.runPriceCycle()).alerts, 0);
+
+  await msg("/precio " + MINT + " quitar");
+  assert.match(telegram.last(), /Quitadas 1 alertas de precio de <b>\$ORCA/);
+  assert.equal(store.chat("1").prices.length, 0);
+  await msg("/precio " + MINT + " quitar");
+  assert.match(telegram.last(), /No tenías alertas/);
+});
+
+test("price alerts: percentage moves re-arm from the new price", async () => {
+  const state = { prices: { [MINT]: 0.00001 } };
+  const { telegram, msg, bot, store } = setup(state);
+  await msg("/lang en");
+  await msg("/price " + MINT + " 20%");
+  assert.match(telegram.last(), /moves <b>20%<\/b>/);
+  assert.match(telegram.last(), /It is now \$0\.00001\./);
+  state.prices[MINT] = 0.0000115;   // +15%: not yet
+  assert.equal((await bot.runPriceCycle()).alerts, 0);
+  state.prices[MINT] = 0.0000125;   // +25%
+  assert.equal((await bot.runPriceCycle()).alerts, 1);
+  assert.match(telegram.last(), /📈 <b>\$ORCA is up 25%<\/b> \(\$0\.00001 → \$0\.0000125\)/);
+  assert.equal(store.chat("1").prices[0].ref, 0.0000125);
+  state.prices[MINT] = 0.0000095;   // -24% from the new reference
+  assert.equal((await bot.runPriceCycle()).alerts, 1);
+  assert.match(telegram.last(), /📉 <b>\$ORCA is down 24%<\/b>/);
+  assert.equal(store.chat("1").prices.length, 1);   // a move alert keeps running
+});
+
+test("price alerts: one request for many chats, failures and bad input", async () => {
+  const state = { prices: { [MINT]: 2 } };
+  const { telegram, msg, bot, store } = setup(state);
+  await msg("/precio " + MINT + " <1", 1);
+  await msg("/precio " + MINT + " >10%", 2);   // 10% up from now
+  assert.match(telegram.last(), /suba de <b>2,20 \$/);
+  state.dexCalls = 0;
+  assert.equal((await bot.runPriceCycle()).alerts, 0);
+  assert.equal(state.dexCalls, 1);
+  // DexScreener down or the token missing this time: no alerts, alerts kept
+  state.prices = "down";
+  assert.equal((await bot.runPriceCycle()).alerts, 0);
+  state.prices = {};
+  assert.equal((await bot.runPriceCycle()).alerts, 0);
+  assert.equal(store.chat("1").prices.length + store.chat("2").prices.length, 2);
+  // no market, bad condition, invalid address
+  await msg("/precio " + WALLET + " >1");
+  assert.match(telegram.last(), /No encuentro mercado/);
+  state.prices = { [MINT]: 2 };
+  await msg("/precio " + MINT + " mucho");
+  assert.match(telegram.last(), /No entiendo ese precio/);
+  await msg("/precio 0xabc >1");
+  assert.match(telegram.last(), /no parece una dirección/);
+});
+
 /* ---------- pure helpers ---------- */
+
+test("parseCondition reads targets and percentages", () => {
+  assert.deepEqual(parseCondition(">1,5", 1), { kind: "above", value: 1.5 });
+  assert.deepEqual(parseCondition("<0.8", 1), { kind: "below", value: 0.8 });
+  assert.deepEqual(parseCondition("$2", 1), { kind: "above", value: 2 });
+  assert.deepEqual(parseCondition("0.5", 1), { kind: "below", value: 0.5 });
+  assert.deepEqual(parseCondition("1.234,5", 1), { kind: "above", value: 1234.5 });
+  assert.deepEqual(parseCondition("20%", 1), { kind: "move", value: 20 });
+  assert.deepEqual(parseCondition("<50%", 2), { kind: "below", value: 1 });
+  assert.equal(parseCondition("<100%", 2), null);
+  assert.equal(parseCondition("0%", 2), null);
+  assert.equal(parseCondition("abc", 2), null);
+  assert.equal(parseCondition("", 2), null);
+});
+
+test("checkAlert and priceText", () => {
+  assert.equal(checkAlert({ kind: "above", value: 2 }, 1.9), null);
+  assert.deepEqual(checkAlert({ kind: "above", value: 2 }, 2), { kind: "above", to: 2 });
+  assert.equal(checkAlert({ kind: "below", value: 2 }, 0), null);   // no price is not a crash
+  assert.equal(checkAlert({ kind: "move", value: 10, ref: 1 }, 1.09), null);
+  assert.equal(checkAlert({ kind: "move", value: 10, ref: 1 }, 0.9).kind, "down");
+  assert.equal(priceText(64250.7, "en"), "$64,251");
+  assert.equal(priceText(1.5, "es"), "1,50 $");
+  assert.equal(priceText(0.00001234567, "en"), "$0.00001235");
+});
 
 test("diffToken ignores noise and reports improvements", () => {
   const base = { lvl: "MEDIUM", liq: 100000, signals: [{ code: "MKT_LIQ_LOW", s: "warn" }] };
