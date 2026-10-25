@@ -177,6 +177,11 @@ export function createBot(deps) {
       case "help":
         // t.me/<bot>?start=<address> (the scanner's "Vigilar en Telegram" button) arrives as "/start <address>"
         if (ADDRESS_RE.test(first)) return watch(chatId, first, lang);
+        {
+          // the scanner's "💲 Alerta de precio" menu: p_<mint>, p_<mint>_a50 (up 50%), _b30 (down 30%), _m20 (every 20%)
+          const p = first.match(/^p_([1-9A-HJ-NP-Za-km-z]{32,44})(?:_([abm])(\d{1,4}))?$/);
+          if (p) return price(chatId, p[1] + (p[2] ? " " + { a: ">", b: "<", m: "" }[p[2]] + p[3] + "%" : ""), lang);
+        }
         return reply(chatId, t(lang).help(intervalMin, maxWatches, priceMin));
       case "analyze": return first ? analyze(chatId, first, lang) : reply(chatId, t(lang).needAddr);
       case "watch": return watch(chatId, first, lang);

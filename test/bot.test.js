@@ -341,6 +341,21 @@ test("price alerts: one request for many chats, failures and bad input", async (
   assert.match(telegram.last(), /no parece una dirección/);
 });
 
+test("price alert links from the scanner (t.me/<bot>?start=p_<mint>_...)", async () => {
+  const state = { prices: { [MINT]: 2 } };
+  const { telegram, msg, store } = setup(state);
+  await msg("/start p_" + MINT + "_a50");
+  assert.match(telegram.last(), /suba de <b>3,00 \$/);
+  await msg("/start p_" + MINT + "_b30");
+  assert.match(telegram.last(), /baje de <b>1,40 \$/);
+  await msg("/start p_" + MINT + "_m20");
+  assert.match(telegram.last(), /se mueva un <b>20%/);
+  assert.equal(store.chat("1").prices.length, 3);
+  await msg("/start p_" + MINT);   // no condition: price and how to choose one
+  assert.match(telegram.last(), /vale ahora <b>2,00 \$/);
+  assert.equal(store.chat("1").prices.length, 3);
+});
+
 /* ---------- pure helpers ---------- */
 
 test("parseCondition reads targets and percentages", () => {
