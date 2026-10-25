@@ -125,7 +125,10 @@ export function createBot(deps) {
     const { cmd, arg } = parse(msg.text);
     const first = arg.split(/\s+/)[0] || "";
     switch (cmd) {
-      case "help": return reply(chatId, t(lang).help(intervalMin, maxWatches));
+      case "help":
+        // t.me/<bot>?start=<address> (the scanner's "Vigilar en Telegram" button) arrives as "/start <address>"
+        if (ADDRESS_RE.test(first)) return watch(chatId, first, lang);
+        return reply(chatId, t(lang).help(intervalMin, maxWatches));
       case "analyze": return first ? analyze(chatId, first, lang) : reply(chatId, t(lang).needAddr);
       case "watch": return watch(chatId, first, lang);
       case "unwatch": return unwatch(chatId, first, lang);

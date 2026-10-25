@@ -71,6 +71,20 @@ test("pasting a token address replies with the analysis", async () => {
   assert.match(html, /dexscreener\.com\/solana\/PAIR1/);
 });
 
+test("a t.me/<bot>?start=<address> link starts watching that address", async () => {
+  const { telegram, msg, store } = setup({ token: tokenResult(), snap: {} });
+  await msg("/start " + MINT);   // what Telegram sends when the scanner's button is tapped
+  assert.match(telegram.last(), /Vigilando el token <b>\$ORCA<\/b>/);
+  assert.equal(store.chat("1").watches[0].addr, MINT);
+  await msg("/start " + WALLET);
+  assert.match(telegram.last(), /Vigilando la wallet/);
+  // a plain /start (or a payload that is not an address) still shows the help
+  await msg("/start");
+  assert.match(telegram.last(), /Escáner de riesgo/);
+  await msg("/start hola");
+  assert.match(telegram.last(), /Escáner de riesgo/);
+});
+
 test("invalid address, unknown command and help", async () => {
   const { telegram, msg } = setup({});
   await msg("/vigilar 0xdeadbeef");
