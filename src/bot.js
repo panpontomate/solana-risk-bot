@@ -1,8 +1,8 @@
-import { ADDRESS_RE, isMint, describeError } from "solana-risk-engine";
+import { ADDRESS_RE, isMint, describeError, rugcheckReport } from "solana-risk-engine";
 import { escapeHtml as esc } from "./telegram.js";
 import { t } from "./texts.js";
 import { formatToken, formatWallet, short, tokenLabel } from "./format.js";
-import { tokenState, diffToken, formatTokenAlert, walletMoves, formatWalletAlert } from "./watch.js";
+import { tokenState, diffToken, formatTokenAlert, walletMoves, formatWalletAlert, formatCreatorAlert } from "./watch.js";
 
 const COMMANDS = {
   start: "help", help: "help", ayuda: "help",
@@ -39,6 +39,20 @@ export function createBot(deps) {
     try { await telegram.send(chatId, html); } catch (e) { log("send failed", chatId, e.message); }
   }
 
+  // Who created the token, according to RugCheck (null when it doesn't know)
+  async function findCreator(mint) {
+    try {
+      const rc = await rugcheckReport(scanner.client, mint);
+      const c = rc && rc.creator;
+      return c && ADDRESS_RE.test(c) && c !== mint ? c : null;
+    } catch (e) { return null; }
+  }
+
+  async function snapshotOf(addr) {
+    const snap = await scanner.takeSnapshots([addr]);
+    return snap.snapshots[addr] ? { ts: snap.ts, h: snap.snapshots[addr] } : null;
+  }
+
   async function analyze(chatId, addr, lang) {
     if (!ADDRESS_RE.test(addr)) return reply(chatId, t(lang).invalid);
     await reply(chatId, t(lang).analyzing);
@@ -61,9 +75,18 @@ export function createBot(deps) {
       if (await isMint(scanner.client, addr)) {
         const r = await scanner.analyzeToken(addr);
         const label = tokenLabel(r);
-        chat.watches.push({ kind: "token", addr, label, since: Date.now(), state: tokenState(r) });
+        const creatorAddr = await findCreator(addr);
+        let creator = null;
+        if (creatorAddr) {
+          // without a first snapshot the first check only records one: never an alert out of nothing
+          let state = null;
+          try { state = await snapshotOf(creatorAddr); } catch (e) { log("creator snapshot failed", creatorAddr, e.code || e.message); }
+          creator = { addr: creatorAddr, state };
+        }
+        chat.watches.push({ kind: "token", addr, label, since: Date.now(), state: tokenState(r), creator });
         store.save();
-        await reply(chatId, formatToken(r, lang) + "\n\n" + T.watchToken(esc(label), intervalMin));
+        await reply(chatId, formatToken(r, lang) + "\n\n" + T.watchToken(esc(label), intervalMin) + "\n" +
+          (creator ? T.creatorFound(short(creator.addr)) : T.creatorUnknown));
       } else {
         const snap = await scanner.takeSnapshots([addr]);
         const label = short(addr);
@@ -92,7 +115,8 @@ export function createBot(deps) {
     if (!chat.watches.length) return reply(chatId, T.listEmpty);
     const d = (ts) => new Date(ts).toLocaleDateString(lang === "es" ? "es-ES" : "en-GB");
     return reply(chatId, [T.listHead, ...chat.watches.map((w, i) =>
-      `${i + 1}. <b>${esc(w.label)}</b> (${w.kind === "token" ? T.kindToken : T.kindWallet}) · ${T.since} ${d(w.since)}\n<code>${w.addr}</code>`)].join("\n"));
+      `${i + 1}. <b>${esc(w.label)}</b> (${w.kind === "token" ? T.kindToken : T.kindWallet}) · ${T.since} ${d(w.since)}\n<code>${w.addr}</code>` +
+      (w.creator ? "\n" + T.listCreator(short(w.creator.addr)) : ""))].join("\n"));
   }
 
   async function handleMessage(msg) {
@@ -125,27 +149,47 @@ export function createBot(deps) {
    */
   async function runWatchCycle() {
     const cache = new Map();
+    const once = async (key, fn) => { if (!cache.has(key)) cache.set(key, await fn()); return cache.get(key); };
     let alerts = 0;
+
+    // Moves of a wallet since its stored snapshot; null when the wallet could not be read this time
+    async function movesOf(holder, addr) {
+      const snap = await once("wallet:" + addr, () => scanner.takeSnapshots([addr]));
+      const h = snap.snapshots[addr];
+      if (!h) return null;
+      const first = !holder.state;
+      const moves = first ? [] : walletMoves(holder.state.h, h);   // first snapshot: just record it
+      holder.state = { ts: snap.ts, h: h };
+      return moves;
+    }
+
     for (const { chatId, watch: w } of store.allWatches()) {
       const lang = store.chat(chatId).lang;
-      try {
-        if (w.kind === "token") {
-          if (!cache.has(w.addr)) cache.set(w.addr, await scanner.analyzeToken(w.addr));
-          const r = cache.get(w.addr);
-          if (r.lvl === "NO_DATA") continue;   // DexScreener failed this time: unknown, not a change
-          const now = tokenState(r), d = diffToken(w.state, now);
-          if (d.worse || d.better) { await reply(chatId, formatTokenAlert(w.label, d, lang)); alerts++; }
-          w.state = now;
-        } else {
-          if (!cache.has(w.addr)) cache.set(w.addr, await scanner.takeSnapshots([w.addr]));
-          const snap = cache.get(w.addr), h = snap.snapshots[w.addr];
-          if (!h) continue;
-          const moves = walletMoves(w.state && w.state.h, h);
-          if (moves.length) { await reply(chatId, formatWalletAlert(w.label, moves, lang)); alerts++; }
-          w.state = { ts: snap.ts, h: h };
-        }
-      } catch (e) {
-        log("watch check failed", w.kind, w.addr, e.code || e.message);
+      if (w.kind === "token") {
+        try {
+          const r = await once("token:" + w.addr, () => scanner.analyzeToken(w.addr));
+          if (r.lvl !== "NO_DATA") {   // DexScreener failed this time: unknown, not a change
+            const now = tokenState(r), d = diffToken(w.state, now);
+            if (d.worse || d.better) { await reply(chatId, formatTokenAlert(w.label, d, lang)); alerts++; }
+            w.state = now;
+          }
+        } catch (e) { log("token check failed", w.addr, e.code || e.message); }
+        try {
+          // watches from before creator tracking: look the creator up once
+          if (w.creator === undefined) {
+            const c = await findCreator(w.addr);
+            w.creator = c ? { addr: c, state: null } : null;
+          }
+          if (w.creator) {
+            const moves = await movesOf(w.creator, w.creator.addr);
+            if (moves && moves.length) { await reply(chatId, formatCreatorAlert(w.label, w.addr, short(w.creator.addr), moves, lang)); alerts++; }
+          }
+        } catch (e) { log("creator check failed", w.addr, e.code || e.message); }
+      } else {
+        try {
+          const moves = await movesOf(w, w.addr);
+          if (moves && moves.length) { await reply(chatId, formatWalletAlert(w.label, moves, lang)); alerts++; }
+        } catch (e) { log("wallet check failed", w.addr, e.code || e.message); }
       }
     }
     store.save();

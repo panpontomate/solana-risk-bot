@@ -4,7 +4,8 @@ A Telegram bot built on [solana-risk-engine](https://github.com/panpontomate/sol
 
 - **Paste an address:** for a token, you get the four risk lights with their reasons; for a wallet, its riskiest tokens.
 - **`/watch <address>` / `/vigilar`:**
-  - a token alerts you when its risk level rises, a new risk signal appears (for example, mint authority re-enabled or liquidity unlocked) or liquidity drops 30% or more;
+  - a token alerts you when its risk level rises, a new risk signal appears (for example, the mint authority moves from a program to a person's wallet, or LP gets unlocked) or liquidity drops 30% or more;
+  - a token's **creator** is watched too: the bot finds the creator through RugCheck, alerts you to their moves, and flags 🚨 when they sell the token itself;
   - a wallet alerts you about what it buys or sells.
 - **`/list`, `/unwatch <address or number>`, `/lang en|es`**
 

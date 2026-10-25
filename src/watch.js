@@ -49,11 +49,25 @@ export function walletMoves(prevSnap, nowSnap) {
   return chgDiff(prevSnap || {}, nowSnap || {}).sort((x, y) => y.v - x.v);
 }
 
-export function formatWalletAlert(label, moves, lang, max = 12) {
+const MOVE_ICON = { new: "🟢", more: "🟢", less: "🔻", sold: "🔻" };
+
+function moveLines(moves, lang, max) {
   const T = t(lang), f = format(lang);
-  const icon = { new: "🟢", more: "🟢", less: "🔻", sold: "🔻" };
-  const lines = [T.alertWallet(esc(label))];
-  for (const m of moves.slice(0, max)) lines.push(`${icon[m.k]} ${T.moves[m.k]}: <b>$${esc(m.s)}</b> ${f.usd(m.v)}`);
+  const lines = moves.slice(0, max).map((m) => `${MOVE_ICON[m.k]} ${T.moves[m.k]}: <b>$${esc(m.s)}</b> ${f.usd(m.v)}`);
   if (moves.length > max) lines.push("…+" + (moves.length - max));
-  return lines.join("\n");
+  return lines;
+}
+
+export function formatWalletAlert(label, moves, lang, max = 12) {
+  return [t(lang).alertWallet(esc(label))].concat(moveLines(moves, lang, max)).join("\n");
+}
+
+// The creator's moves, with sales of the watched token itself first and flagged: the creator dumping
+// their own token is the clearest sign they are leaving
+export function formatCreatorAlert(label, mint, creator, moves, lang, max = 12) {
+  const T = t(lang);
+  const own = moves.filter((m) => m.m === mint), rest = moves.filter((m) => m.m !== mint);
+  const lines = [T.alertCreator(esc(label), esc(creator))];
+  if (own.some((m) => m.k === "less" || m.k === "sold")) lines.push(T.creatorDumping(esc(label)));
+  return lines.concat(moveLines(own.concat(rest), lang, max)).join("\n");
 }

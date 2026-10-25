@@ -27,13 +27,22 @@ function tokenResult(o) {
 // A scanner whose answers the test controls
 function fakeScanner(state) {
   return {
-    client: { ownRpc: () => false, rpc: async (method, params) => {
-      if (method === "getAccountInfo") return params[0] === MINT ? { value: { owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", data: { parsed: { type: "mint" } } } } : { value: null };
-      throw new Error("unexpected " + method);
-    } },
+    client: {
+      ownRpc: () => false,
+      rpc: async (method, params) => {
+        if (method === "getAccountInfo") return params[0] === MINT ? { value: { owner: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", data: { parsed: { type: "mint" } } } } : { value: null };
+        throw new Error("unexpected " + method);
+      },
+      // RugCheck's full report, which is where the creator comes from
+      softJson: async (url) => { state.rcCalls = (state.rcCalls || 0) + 1; return url.endsWith(MINT + "/report") && state.creator ? { creator: state.creator } : null; }
+    },
     analyzeToken: async () => { state.calls = (state.calls || 0) + 1; return state.token; },
     analyzeAddress: async (a) => a === MINT ? { kind: "token", token: state.token } : { kind: "wallet", wallet: state.wallet },
-    takeSnapshots: async (ws) => { state.snapCalls = (state.snapCalls || 0) + 1; return { ts: 1, snapshots: { [ws[0]]: state.snap }, failed: 0 }; }
+    takeSnapshots: async (ws) => {
+      state.snapCalls = (state.snapCalls || 0) + 1;
+      const h = state.snaps && ws[0] in state.snaps ? state.snaps[ws[0]] : state.snap;
+      return { ts: 1, snapshots: h ? { [ws[0]]: h } : {}, failed: 0 };
+    }
   };
 }
 
@@ -151,6 +160,74 @@ test("watch cycle reports wallet buys and sells", async () => {
   assert.match(html, /Ha vendido todo: <b>\$AAA<\/b>/);
   // no changes next time
   assert.equal((await bot.runWatchCycle()).alerts, 0);
+});
+
+const CREATOR = "DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy";
+
+test("watching a token also watches its creator, and flags them selling it", async () => {
+  const state = { token: tokenResult(), creator: CREATOR, snaps: { [CREATOR]: { [MINT]: { q: 1000, v: 5000, s: "ORCA" }, X: { q: 1, v: 30, s: "XXX" } } } };
+  const { telegram, msg, bot, store } = setup(state);
+  await msg("/vigilar " + MINT);
+  assert.match(telegram.last(), /También vigilo al <b>creador<\/b> \(DRpb…21hy\)/);
+  const w = store.chat("1").watches[0];
+  assert.equal(w.creator.addr, CREATOR);
+  assert.ok(w.creator.state.h[MINT]);
+  await msg("/lista");
+  assert.match(telegram.last(), /\+ creador DRpb…21hy/);
+
+  // nothing moved: no alert
+  telegram.sent.length = 0;
+  assert.equal((await bot.runWatchCycle()).alerts, 0);
+
+  // the creator dumps the token and buys something new
+  state.snaps[CREATOR] = { Y: { q: 5, v: 900, s: "NEW" }, X: { q: 1, v: 30, s: "XXX" } };
+  assert.equal((await bot.runWatchCycle()).alerts, 1);
+  const html = telegram.last();
+  assert.match(html, /El creador de \$ORCA se ha movido/);
+  assert.match(html, /🚨 <b>Está vendiendo el propio \$ORCA<\/b>/);
+  // the sale of the token itself comes first, before the other moves
+  assert.ok(html.indexOf("Ha vendido todo: <b>$ORCA</b>") < html.indexOf("Nuevo: <b>$NEW</b>"));
+});
+
+test("creator buying more of the token is reported without the dump warning", async () => {
+  const state = { token: tokenResult(), creator: CREATOR, snaps: { [CREATOR]: { [MINT]: { q: 100, v: 500, s: "ORCA" } } } };
+  const { telegram, msg, bot } = setup(state);
+  await msg("/vigilar " + MINT);
+  state.snaps[CREATOR] = { [MINT]: { q: 300, v: 1500, s: "ORCA" } };
+  await bot.runWatchCycle();
+  assert.match(telegram.last(), /Ha comprado más: <b>\$ORCA<\/b>/);
+  assert.doesNotMatch(telegram.last(), /🚨/);
+});
+
+test("token without a known creator, and old watches that predate creator tracking", async () => {
+  const state = { token: tokenResult(), snaps: {} };
+  const { telegram, msg, bot, store } = setup(state);
+  await msg("/vigilar " + MINT);
+  assert.match(telegram.last(), /No he encontrado quién creó este token/);
+  assert.equal(store.chat("1").watches[0].creator, null);
+
+  // a watch saved before this feature has no `creator` field: the next cycle looks it up once,
+  // records a first snapshot and does not alert out of nothing
+  delete store.chat("1").watches[0].creator;
+  state.creator = CREATOR;
+  state.snaps[CREATOR] = { [MINT]: { q: 10, v: 100, s: "ORCA" } };
+  telegram.sent.length = 0;
+  assert.equal((await bot.runWatchCycle()).alerts, 0);
+  assert.equal(store.chat("1").watches[0].creator.addr, CREATOR);
+  const calls = state.rcCalls;
+  await bot.runWatchCycle();
+  assert.equal(state.rcCalls, calls);   // not looked up again
+});
+
+test("a creator whose wallet can't be read is skipped without alerts", async () => {
+  const state = { token: tokenResult(), creator: CREATOR, snaps: { [CREATOR]: { [MINT]: { q: 10, v: 100, s: "ORCA" } } } };
+  const { telegram, msg, bot } = setup(state);
+  await msg("/vigilar " + MINT);
+  telegram.sent.length = 0;
+  state.snaps[CREATOR] = null;   // RPC failure this time
+  assert.equal((await bot.runWatchCycle()).alerts, 0);
+  state.snaps[CREATOR] = { [MINT]: { q: 10, v: 100, s: "ORCA" } };
+  assert.equal((await bot.runWatchCycle()).alerts, 0);   // and no fake "sold" afterwards
 });
 
 test("errors from the engine become friendly messages", async () => {
