@@ -78,7 +78,9 @@ export function createBot(deps) {
     await reply(chatId, T.analyzing);
     try {
       if (await isMint(scanner.client, addr)) {
-        const r = await scanner.analyzeToken(addr);
+        // Watches skip the serial-creator check: its 24 h count fades on its own and a RugCheck timeout
+        // would hide it, so it would only bring "risk dropped" alerts. A direct analysis still shows it
+        const r = await scanner.analyzeToken(addr, { skipCreator: true });
         const label = tokenLabel(r);
         const creatorAddr = await findCreator(addr);
         let creator = null;
@@ -256,7 +258,7 @@ export function createBot(deps) {
       const lang = store.chat(chatId).lang;
       if (w.kind === "token") {
         try {
-          const r = await once("token:" + w.addr, () => scanner.analyzeToken(w.addr));
+          const r = await once("token:" + w.addr, () => scanner.analyzeToken(w.addr, { skipCreator: true }));
           if (r.lvl !== "NO_DATA") {   // DexScreener failed this time: unknown, not a change
             const now = tokenState(r), d = diffToken(w.state, now);
             if (d.worse || d.better) { await reply(chatId, formatTokenAlert(w.label, d, lang)); alerts++; }
