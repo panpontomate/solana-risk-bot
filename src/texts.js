@@ -2,7 +2,7 @@
 export const TEXTS = {
   es: {
     help: (n, max, pn) => [
-      "🔎 <b>Escáner de riesgo de Solana</b>",
+      "🚩 <b>SolFlag</b> · Escáner de riesgo de Solana",
       "",
       "Pégame la dirección de un <b>token</b> o de una <b>wallet</b> y te digo su riesgo, con el motivo de cada aviso.",
       "",
@@ -14,6 +14,7 @@ export const TEXTS = {
       "/idioma en: switch to English",
       "",
       `Reviso lo vigilado cada ${n} min y los precios cada ${pn} min. Máximo ${max} por chat.`,
+      "🌐 Análisis completo, ballenas y radar de lanzamientos en <a href=\"https://solflag.com\">solflag.com</a>",
       "<i>Herramienta heurística, no es consejo financiero: «riesgo bajo» significa que no encontré las señales que busco, no que sea seguro.</i>"
     ].join("\n"),
     analyzing: "⏳ Analizando… con los RPC gratuitos puede tardar hasta un minuto.",
@@ -84,7 +85,7 @@ export const TEXTS = {
   },
   en: {
     help: (n, max, pn) => [
-      "🔎 <b>Solana risk scanner</b>",
+      "🚩 <b>SolFlag</b> · Solana risk scanner",
       "",
       "Paste a <b>token</b> or <b>wallet</b> address and I'll tell you its risk, with the reason behind every warning.",
       "",
@@ -96,6 +97,7 @@ export const TEXTS = {
       "/lang es: cambiar a español",
       "",
       `I check watched items every ${n} min and prices every ${pn} min. Up to ${max} per chat.`,
+      "🌐 Full analysis, whales and a launch radar at <a href=\"https://solflag.com/en/\">solflag.com</a>",
       "<i>Heuristic tool, not financial advice: \"low risk\" means I found none of the signals I look for, not that it is safe.</i>"
     ].join("\n"),
     analyzing: "⏳ Analysing… with free RPCs this can take up to a minute.",

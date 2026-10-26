@@ -1,6 +1,6 @@
 # solana-risk-bot
 
-A Telegram bot built on [solana-risk-engine](https://github.com/panpontomate/solana-risk-engine). Paste a Solana token or wallet address and the bot explains its risk. You can also watch tokens and wallets and get alerts when something changes. It has no dependencies besides the engine.
+**SolFlag** on Telegram, the companion of [solflag.com](https://solflag.com). A Telegram bot built on [solana-risk-engine](https://github.com/panpontomate/solana-risk-engine). Paste a Solana token or wallet address and the bot explains its risk. You can also watch tokens and wallets and get alerts when something changes. It has no dependencies besides the engine.
 
 - **Paste an address:** for a token, you get the four risk lights with their reasons; for a wallet, its riskiest tokens.
 - **`/watch <address>` / `/vigilar`:**

@@ -9,6 +9,11 @@ export function short(a) {
   return a.slice(0, 4) + "…" + a.slice(-4);
 }
 
+// The same analysis on the web, in the chat's language: solflag.com/?token=<address> opens it directly
+export function webLink(addr, lang) {
+  return "https://solflag.com/" + (lang === "en" ? "en/" : "") + "?token=" + addr;
+}
+
 export function tokenLabel(r) {
   return r.sym && r.sym !== short(r.mint) ? "$" + r.sym : short(r.mint);
 }
@@ -24,6 +29,7 @@ export function formatToken(r, lang) {
   else for (const x of r.reasons) lines.push(`• ${esc(describe(x, lang))}`);
   const links = [`<a href="https://solscan.io/token/${r.mint}">Solscan</a>`];
   if (r.pair && r.pair.pairAddress) links.unshift(`<a href="https://dexscreener.com/solana/${r.pair.pairAddress}">DexScreener</a>`);
+  links.unshift(`<a href="${webLink(r.mint, lang)}">SolFlag</a>`);
   lines.push("", `<code>${r.mint}</code>`, links.join(" · "));
   return lines.join("\n");
 }
@@ -43,6 +49,6 @@ export function formatWallet(w, lang, maxRows = 10) {
   if (listed.length > shown.length) lines.push(T.walletRest(listed.length - shown.length));
   if (spam || nomk) lines.push("", T.walletSpam(spam, nomk));
   if (w.hidden) lines.push(T.walletHidden(w.hidden));
-  lines.push("", `<a href="https://solscan.io/account/${w.wallet}">Solscan</a>`);
+  lines.push("", `<a href="${webLink(w.wallet, lang)}">SolFlag</a> · <a href="https://solscan.io/account/${w.wallet}">Solscan</a>`);
   return lines.join("\n");
 }

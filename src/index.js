@@ -13,6 +13,7 @@ import { createScanner } from "solana-risk-engine";
 import { createTelegram } from "./telegram.js";
 import { createStore } from "./store.js";
 import { createBot } from "./bot.js";
+import { syncProfile } from "./profile.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -43,6 +44,8 @@ const bot = createBot({ telegram, store, scanner, intervalMin, maxWatches, price
 
 const me = await telegram.call("getMe");
 log(`bot @${me.username} listo · RPC ${scanner.client.ownRpc() ? "propio" : "gratuito"} · vigilancia cada ${intervalMin} min · precios cada ${priceMin} min`);
+// Nombre, descripción y menú de comandos de SolFlag en Telegram (solo cambia lo que no coincide)
+syncProfile(telegram, log).catch(() => {});
 
 // Watch loop: one pass at a time, never overlapping
 let cycleRunning = false;

@@ -429,3 +429,17 @@ test("long messages are split under Telegram's limit", () => {
   assert.ok(parts.every((p) => p.length <= 1000));
   assert.equal(parts.join("\n").split("\n").length, 500);
 });
+
+test("SolFlag: help and analyses link to solflag.com; the profile sync only sets what differs", async () => {
+  const { formatToken, webLink } = await import("../src/format.js");
+  const { syncProfile, PROFILE } = await import("../src/profile.js");
+  assert.equal(webLink("Abc", "es"), "https://solflag.com/?token=Abc");
+  assert.equal(webLink("Abc", "en"), "https://solflag.com/en/?token=Abc");
+  const calls = [];
+  const fake = { call: async (m, p) => { calls.push([m, p]); if (m === "getMyName") return { name: p.language_code ? "Old" : "SolFlag" }; if (m.startsWith("get")) return {}; return true; } };
+  await syncProfile(fake);
+  const sets = calls.filter(([m]) => m.startsWith("set")).map(([m, p]) => m + ":" + (p.language_code || "es"));
+  assert.ok(!sets.includes("setMyName:es"), "the Spanish name already matched");
+  assert.ok(sets.includes("setMyName:en") && sets.includes("setMyDescription:es") && sets.includes("setMyCommands:en"));
+  assert.equal(PROFILE.es.name, "SolFlag");
+});
