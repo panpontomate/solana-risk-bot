@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "solana-risk-bot",
   "version": "0.1.0",
   "private": true,
@@ -13,7 +13,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "solana-risk-engine": "^0.3.1"
+    "solana-risk-engine": "^0.3.2"
   },
   "license": "MIT",
   "author": "panpontomate"
