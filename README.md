@@ -36,6 +36,7 @@ Watched items and each chat's language are kept in `data/store.json`.
 | Variable | Default | |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | required | From @BotFather. Keep it secret. |
+| `OLD_TELEGRAM_BOT_TOKEN` | — | A previous bot after a move (SolFlag moved from @panpontomate_escaner_bot to @SolFlagBot). It answers every message with a button to the new bot, tells chats with watches or alerts once, and delivers alerts to people who have not opened the new bot yet. Watches and alerts are shared. |
 | `SOLANA_RPC_URL` | free public RPCs | Your own RPC (Helius, Triton…). Faster and more reliable. |
 | `WATCH_INTERVAL_MIN` | 15 | Minutes between checks of watched items. |
 | `MAX_WATCHES` | 10 | Watched items per chat. |

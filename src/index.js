@@ -1,6 +1,7 @@
 // Starts the bot: long polling for messages and a periodic pass over watched tokens and wallets.
 // Configuration comes from environment variables or a .env file next to package.json:
 //   TELEGRAM_BOT_TOKEN   required, from @BotFather
+//   OLD_TELEGRAM_BOT_TOKEN  optional, a previous bot: it only points people to the new one (see moved.js)
 //   SOLANA_RPC_URL       optional, your own RPC (Helius, Triton...). Without it, free public RPCs
 //   WATCH_INTERVAL_MIN   optional, minutes between watch checks (default 15)
 //   MAX_WATCHES          optional, per chat (default 10)
@@ -14,6 +15,7 @@ import { createTelegram } from "./telegram.js";
 import { createStore } from "./store.js";
 import { createBot } from "./bot.js";
 import { syncProfile } from "./profile.js";
+import { createMovedBot, withFallback } from "./moved.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -37,15 +39,29 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
   process.exit(1);
 }
 
-const telegram = createTelegram(process.env.TELEGRAM_BOT_TOKEN);
+const main = createTelegram(process.env.TELEGRAM_BOT_TOKEN);
 const store = createStore(join(root, "data", "store.json"));
 const scanner = createScanner({ rpcUrl: process.env.SOLANA_RPC_URL });
+
+const me = await main.call("getMe");
+// Bot antiguo (si está): solo manda a la gente al nuevo y entrega los avisos que el nuevo no puede
+const oldToken = process.env.OLD_TELEGRAM_BOT_TOKEN;
+const old = oldToken && oldToken !== process.env.TELEGRAM_BOT_TOKEN ? createTelegram(oldToken) : null;
+const oldMe = old ? await old.call("getMe").catch((e) => { log("bot antiguo no disponible:", e.message); return null; }) : null;
+const telegram = withFallback(main, oldMe ? old : null, me.username, store);
 const bot = createBot({ telegram, store, scanner, intervalMin, maxWatches, priceMin, maxPrices, log });
 
-const me = await telegram.call("getMe");
-log(`bot @${me.username} listo · RPC ${scanner.client.ownRpc() ? "propio" : "gratuito"} · vigilancia cada ${intervalMin} min · precios cada ${priceMin} min`);
+log(`bot @${me.username} listo · RPC ${scanner.client.ownRpc() ? "propio" : "gratuito"} · vigilancia cada ${intervalMin} min · precios cada ${priceMin} min` +
+  (oldMe ? ` · @${oldMe.username} redirige a @${me.username}` : ""));
 // Nombre, descripción y menú de comandos de SolFlag en Telegram (solo cambia lo que no coincide)
-syncProfile(telegram, log).catch(() => {});
+syncProfile(main, log).catch(() => {});
+
+if (oldMe) {
+  const moved = createMovedBot({ telegram: old, store, newUsername: me.username, log });
+  moved.syncMovedProfile().catch(() => {});
+  moved.announce().then((n) => { if (n) log(`mudanza: avisados ${n} chats con vigilancias o alertas`); }).catch((e) => log("mudanza:", e.message));
+  poll(old, oldMe.id, (m) => moved.handleMessage(m));
+}
 
 // Watch loop: one pass at a time, never overlapping
 let cycleRunning = false;
@@ -73,19 +89,22 @@ setInterval(async () => {
   finally { priceRunning = false; }
 }, priceMin * 60000);
 
-// Message loop. Each message is handled in the background so a slow analysis never blocks the others.
-for (;;) {
-  try {
-    const updates = await telegram.getUpdates(store.offset, 50);
-    for (const u of updates) {
-      store.offset = u.update_id + 1;
-      if (u.message) {
-        log("mensaje", u.message.chat.id, JSON.stringify(u.message.text || "").slice(0, 80));
-        bot.handleMessage(u.message).catch((e) => log("error", e.message));
+// Message loop of one bot. Each message is handled in the background so a slow analysis never blocks the others.
+async function poll(tg, botId, handle) {
+  for (;;) {
+    try {
+      const updates = await tg.getUpdates(store.offsetOf(botId), 50);
+      for (const u of updates) {
+        store.setOffset(botId, u.update_id + 1);
+        if (u.message) {
+          log(botId === me.id ? "mensaje" : "mensaje (bot antiguo)", u.message.chat.id, JSON.stringify(u.message.text || "").slice(0, 80));
+          handle(u.message).catch((e) => log("error", e.message));
+        }
       }
+    } catch (e) {
+      log("telegram", e.message);
+      await new Promise((r) => setTimeout(r, e.retryAfter ? e.retryAfter * 1000 : 5000));
     }
-  } catch (e) {
-    log("telegram", e.message);
-    await new Promise((r) => setTimeout(r, e.retryAfter ? e.retryAfter * 1000 : 5000));
   }
 }
+poll(main, me.id, (m) => bot.handleMessage(m));
