@@ -13,7 +13,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "solana-risk-engine": "^0.4.8"
+    "solana-risk-engine": "^0.4.9"
   },
   "license": "MIT",
   "author": "panpontomate"
