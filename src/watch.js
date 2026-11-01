@@ -27,7 +27,9 @@ export function diffToken(prev, now) {
   if (a && b && a !== b) { out.level = [prev.lvl, now.lvl]; if (b > a) out.worse = true; else out.better = true; }
   const had = new Set(prev.signals.map((x) => x.code));
   out.newSignals = now.signals.filter((x) => !had.has(x.code));
-  if (out.newSignals.length) out.worse = true;
+  // a level that went down with only yellow lines new is an improvement told in other words (engine 0.4.9:
+  // USDC from HIGH to LOW now says "issued by Circle"); a new red one is always worse
+  if (out.newSignals.some((x) => x.s === "bad") || (out.newSignals.length && !out.better)) out.worse = true;
   if (prev.liq >= 1000 && now.liq < prev.liq * 0.7) {
     out.liqDrop = { pct: Math.round((1 - now.liq / prev.liq) * 100), from: prev.liq, to: now.liq };
     out.worse = true;

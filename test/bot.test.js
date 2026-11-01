@@ -392,6 +392,13 @@ test("diffToken ignores noise and reports improvements", () => {
   // small liquidity moves and tiny pools are not alerts
   assert.equal(diffToken(base, Object.assign({}, base, { liq: 80000 })).liqDrop, null);
   assert.equal(diffToken({ lvl: "LOW", liq: 500, signals: [] }, { lvl: "LOW", liq: 10, signals: [] }).liqDrop, null);
+  // the level went down and the only new lines are yellow: better, not worse (USDC with engine 0.4.9)
+  const usdc = diffToken({ lvl: "HIGH", liq: 1e6, signals: [{ code: "COPYCAT", s: "bad" }, { code: "DEP_PROGRAM_AUTHORITY", s: "warn" }] },
+    { lvl: "LOW", liq: 1e6, signals: [{ code: "DEP_KNOWN_ISSUER", s: "warn", data: { issuer: "Circle" } }] });
+  assert.deepEqual([usdc.better, usdc.worse, usdc.newSignals.length], [true, false, 1]);
+  // a new red line is worse even if the level went down; a new yellow one at the same level is still worse
+  assert.equal(diffToken(base, { lvl: "LOW", liq: 100000, signals: [{ code: "MKT_LP_UNLOCKED", s: "bad" }] }).worse, true);
+  assert.equal(diffToken(base, { lvl: "MEDIUM", liq: 100000, signals: base.signals.concat([{ code: "CTL_FREEZE_ACTIVE", s: "warn" }]) }).worse, true);
   // noisy signals never become "new signal" alerts
   const st = tokenState(tokenResult({ reasons: [{ code: "MKT_VOLUME_LOW", s: "warn" }, { code: "MKT_NEW", s: "warn" }, { code: "MKT_LIQ_LOW", s: "warn" }] }));
   assert.deepEqual(st.signals.map((x) => x.code), ["MKT_LIQ_LOW"]);
