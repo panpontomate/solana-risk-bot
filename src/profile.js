@@ -12,6 +12,7 @@ export const PROFILE = {
       ["lista", "Lo que vigilas y tus alertas"],
       ["dejar", "Dejar de vigilar algo"],
       ["idioma", "Cambiar de idioma"],
+      ["borrar", "Borrar tus datos"],
       ["ayuda", "Cómo funciona"]
     ]
   },
@@ -25,6 +26,7 @@ export const PROFILE = {
       ["list", "What you watch and your alerts"],
       ["unwatch", "Stop watching something"],
       ["lang", "Change language"],
+      ["delete", "Delete your data"],
       ["help", "How it works"]
     ]
   }

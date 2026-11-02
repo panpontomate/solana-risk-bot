@@ -12,6 +12,7 @@ export const TEXTS = {
       "/lista: lo que estás vigilando y tus alertas de precio",
       "/dejar <i>dirección o número</i>: dejar de vigilar",
       "/idioma en: switch to English",
+      "/borrar: borrar todo lo que guardo de este chat",
       "",
       `Reviso lo vigilado cada ${n} min y los precios cada ${pn} min. Máximo ${max} por chat.`,
       "🌐 Análisis completo, ballenas y radar de lanzamientos en <a href=\"https://solflag.com\">solflag.com</a>",
@@ -21,6 +22,10 @@ export const TEXTS = {
     invalid: "Eso no parece una dirección de Solana. Son de 32 a 44 letras y números y no empiezan por 0x.",
     needAddr: "Escríbelo con una dirección, por ejemplo: /vigilar <i>dirección</i>",
     unknown: "No conozco ese comando. Escribe /ayuda para ver los que hay.",
+    forgetAsk: (w, p) => `De este chat guardo el idioma, lo que vigilas (${w}) y tus alertas de precio (${p}). Nada más: ni tu nombre ni tu teléfono.
+
+Para borrarlo todo escribe <b>/borrar sí</b>. No se puede deshacer.`,
+    forgetDone: "🗑 Borrado. Ya no guardo nada de este chat. Si vuelves a escribirme, empiezo de cero.",
     watchToken: (label, n) => `👁 Vigilando el token <b>${label}</b>. Te aviso si sube el riesgo, aparece una señal nueva o cae la liquidez (reviso cada ${n} min).`,
     watchWallet: (label, n) => `👁 Vigilando la wallet <b>${label}</b>. Te aviso de lo que compre o venda (reviso cada ${n} min).`,
     watchExists: "Ya lo estabas vigilando.",
@@ -95,6 +100,7 @@ export const TEXTS = {
       "/list: what you're watching and your price alerts",
       "/unwatch <i>address or number</i>: stop watching",
       "/lang es: cambiar a español",
+      "/delete: delete everything I keep about this chat",
       "",
       `I check watched items every ${n} min and prices every ${pn} min. Up to ${max} per chat.`,
       "🌐 Full analysis, whales and a launch radar at <a href=\"https://solflag.com/en/\">solflag.com</a>",
@@ -104,6 +110,10 @@ export const TEXTS = {
     invalid: "That doesn't look like a Solana address. They are 32 to 44 letters and digits and don't start with 0x.",
     needAddr: "Add an address, for example: /watch <i>address</i>",
     unknown: "I don't know that command. Send /help to see them.",
+    forgetAsk: (w, p) => `For this chat I keep the language, what you watch (${w}) and your price alerts (${p}). Nothing else: not your name or phone number.
+
+To delete it all, send <b>/delete yes</b>. It cannot be undone.`,
+    forgetDone: "🗑 Deleted. I no longer keep anything about this chat. If you write to me again, I start from scratch.",
     watchToken: (label, n) => `👁 Watching token <b>${label}</b>. I'll alert you if risk rises, a new signal appears or liquidity drops (checking every ${n} min).`,
     watchWallet: (label, n) => `👁 Watching wallet <b>${label}</b>. I'll alert you about what it buys or sells (checking every ${n} min).`,
     watchExists: "You were already watching it.",

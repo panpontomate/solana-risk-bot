@@ -12,7 +12,8 @@ const COMMANDS = {
   precio: "price", price: "price", alerta: "price", alert: "price",
   dejar: "unwatch", unwatch: "unwatch",
   lista: "list", list: "list",
-  idioma: "lang", lang: "lang", language: "lang"
+  idioma: "lang", lang: "lang", language: "lang",
+  borrar: "forget", delete: "forget", olvidar: "forget", forget: "forget"
 };
 
 // "/vigilar@MiBot abc" -> { cmd: "watch", arg: "abc" }; plain text -> { cmd: null, arg: text }
@@ -194,6 +195,14 @@ export function createBot(deps) {
         chat.lang = /^en/i.test(first) ? "en" : /^es/i.test(first) ? "es" : (lang === "es" ? "en" : "es");
         store.save();
         return reply(chatId, t(chat.lang).lang);
+      }
+      // the user's right to erase their data: everything this chat has (language, watches, price alerts) goes,
+      // after a confirmation so nobody loses their watches by accident
+      case "forget": {
+        if (!/^(si|sí|yes|confirm(ar)?)$/i.test(first)) return reply(chatId, t(lang).forgetAsk(chat.watches.length, chat.prices.length));
+        delete store.data.chats[chatId];
+        store.save();
+        return reply(chatId, t(lang).forgetDone);
       }
       case "unknown": return reply(chatId, t(lang).unknown);
       default:

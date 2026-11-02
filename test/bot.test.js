@@ -105,6 +105,24 @@ test("invalid address, unknown command and help", async () => {
   assert.match(telegram.last(), /Escáner de riesgo/);
 });
 
+test("/borrar asks first, then deletes everything the chat has", async () => {
+  const state = { token: tokenResult(), snap: {} };
+  const { telegram, msg, store } = setup(state);
+  await msg("/vigilar " + MINT);
+  await msg("/borrar");
+  assert.match(telegram.last(), /lo que vigilas \(1\)/);
+  assert.match(telegram.last(), /\/borrar sí/);
+  assert.ok(store.data.chats["1"]);                       // nothing deleted without the confirmation
+  await msg("/borrar sí");
+  assert.match(telegram.last(), /Borrado/);
+  assert.equal(store.data.chats["1"], undefined);
+  assert.equal(store.allWatches().length, 0);
+  await msg("/lang en"); await msg("/delete");
+  assert.match(telegram.last(), /\/delete yes/);
+  await msg("/delete yes");
+  assert.equal(store.data.chats["1"], undefined);
+});
+
 test("language switch changes every following reply", async () => {
   const { telegram, msg, store } = setup({ token: tokenResult() });
   await msg("/lang en");
