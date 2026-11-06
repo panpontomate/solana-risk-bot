@@ -432,7 +432,10 @@ test("formatting escapes HTML from token names", () => {
   const html = formatToken(tokenResult({ sym: "<b>X", name: "A & B" }), "es");
   assert.match(html, /\$&lt;b&gt;X/);
   assert.match(html, /A &amp; B/);
-  assert.equal(escapeHtml("<a>&"), "&lt;a&gt;&amp;");
+  assert.equal(escapeHtml("<a>&\""), "&lt;a&gt;&amp;&quot;");
+  // a pair address with quotes cannot break out of the link
+  const bad = formatToken(tokenResult({ sym: "<img src=x>", pair: { pairAddress: 'P"><a href="https://evil">', liquidity: { usd: 1 } } }), "en");
+  assert.doesNotMatch(bad, /<img|href="https:\/\/evil/);
 });
 
 test("wallet formatting lists risky tokens and only counts spam", () => {

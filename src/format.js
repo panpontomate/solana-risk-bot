@@ -28,7 +28,7 @@ export function formatToken(r, lang) {
   if (r.lights) for (const l of r.lights) lines.push(`${LIGHT_ICON[l.s]} <b>${esc(lightLabel(l.k, lang))}</b>: ${esc(explainLight(l, lang))}`);
   else for (const x of r.reasons) lines.push(`• ${esc(describe(x, lang))}`);
   const links = [`<a href="https://solscan.io/token/${r.mint}">Solscan</a>`];
-  if (r.pair && r.pair.pairAddress) links.unshift(`<a href="https://dexscreener.com/solana/${r.pair.pairAddress}">DexScreener</a>`);
+  if (r.pair && r.pair.pairAddress) links.unshift(`<a href="https://dexscreener.com/solana/${esc(r.pair.pairAddress)}">DexScreener</a>`);
   links.unshift(`<a href="${webLink(r.mint, lang)}">SolFlag</a>`);
   lines.push("", `<code>${r.mint}</code>`, links.join(" · "));
   return lines.join("\n");

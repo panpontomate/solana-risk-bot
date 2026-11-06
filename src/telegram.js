@@ -1,7 +1,7 @@
 // Minimal Telegram Bot API client: long polling and sending messages. No dependencies.
 
 export function escapeHtml(s) {
-  return String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 // Telegram rejects messages over 4096 characters: split on line breaks
