@@ -39,9 +39,14 @@ export function createTelegram(token, opts = {}) {
     return j.result;
   }
 
-  async function send(chatId, html) {
-    for (const part of splitMessage(html)) {
-      await call("sendMessage", { chat_id: chatId, text: part, parse_mode: "HTML", link_preview_options: { is_disabled: true } });
+  // opts.replyTo: id of the message it answers (groups) · opts.preview: the one link whose preview is shown
+  async function send(chatId, html, opts = {}) {
+    const parts = splitMessage(html);
+    for (let i = 0; i < parts.length; i++) {
+      const p = { chat_id: chatId, text: parts[i], parse_mode: "HTML",
+        link_preview_options: opts.preview ? { url: opts.preview, prefer_small_media: true } : { is_disabled: true } };
+      if (opts.replyTo && i === 0) p.reply_parameters = { message_id: opts.replyTo, allow_sending_without_reply: true };
+      await call("sendMessage", p);
     }
   }
 

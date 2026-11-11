@@ -19,6 +19,21 @@ export const TEXTS = {
       "<i>Herramienta heurística, no es consejo financiero: «riesgo bajo» significa que no encontré las señales que busco, no que sea seguro.</i>"
     ].join("\n"),
     analyzing: "⏳ Analizando… con los RPC gratuitos puede tardar hasta un minuto.",
+    // grupos: solo hablo cuando alguien pega el contrato de un token
+    groupHelp: [
+      "🚩 <b>SolFlag</b> en este grupo",
+      "",
+      "Cuando alguien pegue el contrato de un <b>token</b>, respondo con su riesgo y el enlace a su ficha: quién lo lanzó, quién lo financió y quién compró primero. No contesto a nada más y no guardo lo que se escribe.",
+      "",
+      "/token <i>dirección</i>: analizar uno aunque no lo haya pegado nadie",
+      "/vigilar <i>dirección</i>: los avisos llegan a este grupo",
+      "/idioma en: switch to English",
+      "",
+      "<i>No es consejo financiero: «riesgo bajo» significa que no encontré las señales que busco, no que sea seguro.</i>"
+    ].join("\n"),
+    groupNoSignals: "Sin señales rojas ni amarillas.",
+    groupFicha: "📄 Ficha: quién está detrás",
+    groupFull: "Análisis completo",
     invalid: "Eso no parece una dirección de Solana. Son de 32 a 44 letras y números y no empiezan por 0x.",
     needAddr: "Escríbelo con una dirección, por ejemplo: /vigilar <i>dirección</i>",
     unknown: "No conozco ese comando. Escribe /ayuda para ver los que hay.",
@@ -107,6 +122,21 @@ Para borrarlo todo escribe <b>/borrar sí</b>. No se puede deshacer.`,
       "<i>Heuristic tool, not financial advice: \"low risk\" means I found none of the signals I look for, not that it is safe.</i>"
     ].join("\n"),
     analyzing: "⏳ Analysing… with free RPCs this can take up to a minute.",
+    // groups: I only speak when someone pastes a token's contract
+    groupHelp: [
+      "🚩 <b>SolFlag</b> in this group",
+      "",
+      "When someone pastes a <b>token</b>'s contract, I reply with its risk and a link to its file: who launched it, who funded it and who bought first. I don't answer anything else and I don't store what people write.",
+      "",
+      "/token <i>address</i>: analyse one even if nobody pasted it",
+      "/watch <i>address</i>: the alerts come to this group",
+      "/lang es: cambiar a español",
+      "",
+      "<i>Not financial advice: «low risk» means I didn't find the signals I look for, not that it's safe.</i>"
+    ].join("\n"),
+    groupNoSignals: "No red or yellow signals.",
+    groupFicha: "📄 File: who is behind it",
+    groupFull: "Full analysis",
     invalid: "That doesn't look like a Solana address. They are 32 to 44 letters and digits and don't start with 0x.",
     needAddr: "Add an address, for example: /watch <i>address</i>",
     unknown: "I don't know that command. Send /help to see them.",

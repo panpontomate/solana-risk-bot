@@ -89,8 +89,8 @@ export function withFallback(main, old, newUsername, store) {
   return {
     call: main.call,
     getUpdates: main.getUpdates,
-    async send(chatId, html) {
-      try { return await main.send(chatId, html); }
+    async send(chatId, html, opts) {
+      try { return await main.send(chatId, html, opts); }
       catch (e) {
         if (!old || e.code !== 403) throw e;
         return old.send(chatId, html + "\n\n" + MOVED[langOf(store, String(chatId))].note(newUsername));

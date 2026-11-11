@@ -52,3 +52,22 @@ export function formatWallet(w, lang, maxRows = 10) {
   lines.push("", `<a href="${webLink(w.wallet, lang)}">SolFlag</a> · <a href="https://solscan.io/account/${w.wallet}">Solscan</a>`);
   return lines.join("\n");
 }
+
+// The token's public file (who is behind it), in the chat's language
+export function fichaLink(mint, lang) {
+  return "https://token.solflag.com/" + (lang === "en" ? "en/" : "") + mint;
+}
+
+// Short answer for a group: level, up to 3 red/yellow signals (red first) and the links. The file's preview is
+// what the group sees under it
+export function formatGroup(r, lang, maxSignals = 3) {
+  const T = t(lang);
+  const lines = [`${LEVEL_ICON[r.lvl] || ""} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(levelLabel(r, lang))}</b>`];
+  const rank = { bad: 0, warn: 1 };
+  const bad = (r.lights || []).filter((l) => l.s in rank).sort((a, b) => rank[a.s] - rank[b.s]).slice(0, maxSignals);
+  if (bad.length) for (const l of bad) lines.push(`${LIGHT_ICON[l.s]} ${esc(explainLight(l, lang))}`);
+  else if (!r.lights) for (const x of (r.reasons || []).filter((x) => x.s in rank).slice(0, maxSignals)) lines.push(`• ${esc(describe(x, lang))}`);
+  if (lines.length === 1) lines.push(T.groupNoSignals);
+  lines.push("", `<a href="${fichaLink(r.mint, lang)}">${T.groupFicha}</a> · <a href="${webLink(r.mint, lang)}">${T.groupFull}</a>`);
+  return lines.join("\n");
+}

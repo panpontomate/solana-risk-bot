@@ -49,7 +49,7 @@ const oldToken = process.env.OLD_TELEGRAM_BOT_TOKEN;
 const old = oldToken && oldToken !== process.env.TELEGRAM_BOT_TOKEN ? createTelegram(oldToken) : null;
 const oldMe = old ? await old.call("getMe").catch((e) => { log("bot antiguo no disponible:", e.message); return null; }) : null;
 const telegram = withFallback(main, oldMe ? old : null, me.username, store);
-const bot = createBot({ telegram, store, scanner, intervalMin, maxWatches, priceMin, maxPrices, log });
+const bot = createBot({ telegram, store, scanner, intervalMin, maxWatches, priceMin, maxPrices, log, username: me.username, botId: me.id });
 
 log(`bot @${me.username} listo · RPC ${scanner.client.ownRpc() ? "propio" : "gratuito"} · vigilancia cada ${intervalMin} min · precios cada ${priceMin} min` +
   (oldMe ? ` · @${oldMe.username} redirige a @${me.username}` : ""));
@@ -97,7 +97,9 @@ async function poll(tg, botId, handle) {
       for (const u of updates) {
         store.setOffset(botId, u.update_id + 1);
         if (u.message) {
-          log(botId === me.id ? "mensaje" : "mensaje (bot antiguo)", u.message.chat.id, JSON.stringify(u.message.text || "").slice(0, 80));
+          // en los grupos no se apunta lo que escribe la gente: solo que llegó un mensaje
+          const grupo = /group/.test(u.message.chat.type || "");
+          log(botId === me.id ? (grupo ? "mensaje de grupo" : "mensaje") : "mensaje (bot antiguo)", u.message.chat.id, grupo ? "" : JSON.stringify(u.message.text || "").slice(0, 80));
           handle(u.message).catch((e) => log("error", e.message));
         }
       }

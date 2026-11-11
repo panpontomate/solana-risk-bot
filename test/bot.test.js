@@ -471,3 +471,58 @@ test("SolFlag: help and analyses link to solflag.com; the profile sync only sets
   assert.ok(sets.includes("setMyName:en") && sets.includes("setMyDescription:es") && sets.includes("setMyCommands:en"));
   assert.equal(PROFILE.es.name, "SolFlag");
 });
+
+// ---- groups: only a pasted token gets an answer
+function groupSetup(state) {
+  const sent = [], telegram = { sent, send: async (chatId, html, opts) => { sent.push({ chatId, html, opts }); } };
+  let clock = 1e12;
+  const bot = createBot({ telegram, store: createStore(null), scanner: fakeScanner(state), username: "SolFlagBot", botId: 77, now: () => clock });
+  const msg = (text, extra) => bot.handleMessage(Object.assign({ chat: { id: -100, type: "supergroup" }, message_id: 5, text }, extra || {}));
+  return { sent, bot, msg, later: (ms) => { clock += ms; } };
+}
+
+test("group: chatter, wallets and other bots' commands get no answer", async () => {
+  const { sent, msg } = groupSetup({ token: tokenResult() });
+  await msg("buenos días a todos");
+  await msg("mi wallet es " + WALLET);
+  await msg("/precio@OtroBot " + MINT);
+  await msg("/comando_raro");
+  assert.equal(sent.length, 0);
+});
+
+test("group: a token pasted inside a sentence or a link gets a short reply with the file's preview", async () => {
+  const { sent, msg } = groupSetup({ token: tokenResult({ lvl: "HIGH", lights: [light("control", "bad", "CTL_MINT"), light("market", "warn", "MKT_LOW", { liq: 900, vol: 10 }), light("dependency", "ok", "DEP_NONE")] }) });
+  await msg("mirad este https://pump.fun/coin/" + MINT + " qué os parece");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].opts.replyTo, 5);
+  assert.equal(sent[0].opts.preview, "https://token.solflag.com/" + MINT);
+  assert.match(sent[0].html, /href="https:\/\/token\.solflag\.com\/orca/);
+  assert.match(sent[0].html, /🔴/);
+  assert.ok(sent[0].html.split("\n").length <= 7, "short");
+});
+
+test("group: the same token isn't repeated for 30 min, and a group has a ceiling of answers", async () => {
+  const { sent, msg, later } = groupSetup({ token: tokenResult() });
+  await msg(MINT); await msg("otra vez " + MINT);
+  assert.equal(sent.length, 1);
+  later(31 * 60000);
+  await msg(MINT);
+  assert.equal(sent.length, 2);
+});
+
+test("group: /help and being added show the group help; commands for this bot still work", async () => {
+  const { sent, msg } = groupSetup({ token: tokenResult() });
+  await msg("/start@SolFlagBot");
+  assert.match(sent[0].html, /en este grupo/);
+  await msg(undefined, { text: undefined, new_chat_members: [{ id: 77 }] });
+  assert.match(sent[1].html, /en este grupo/);
+  await msg("/token@SolFlagBot " + MINT);
+  assert.match(sent[sent.length - 1].html, /ORCA/);
+});
+
+test("findAddresses: inside text and links, no repeats, limited", async () => {
+  const { findAddresses } = await import("../src/bot.js");
+  assert.deepEqual(findAddresses("ca: " + MINT + " y " + MINT), [MINT]);
+  assert.deepEqual(findAddresses("https://dexscreener.com/solana/" + WALLET), [WALLET]);
+  assert.deepEqual(findAddresses("nada por aquí 0x1234"), []);
+});

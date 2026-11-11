@@ -1,7 +1,7 @@
 import { ADDRESS_RE, isMint, describeError, rugcheckReport } from "solana-risk-engine";
 import { escapeHtml as esc } from "./telegram.js";
 import { t } from "./texts.js";
-import { formatToken, formatWallet, short, tokenLabel } from "./format.js";
+import { formatToken, formatWallet, formatGroup, fichaLink, short, tokenLabel } from "./format.js";
 import { tokenState, diffToken, formatTokenAlert, walletMoves, formatWalletAlert, formatCreatorAlert } from "./watch.js";
 import { parseCondition, checkAlert, getPrices, priceText } from "./price.js";
 
@@ -33,13 +33,33 @@ export function parse(text) {
  * @param deps.priceMin   minutes between price checks (for the texts)
  * @param deps.maxPrices  price alerts per chat
  * @param deps.log        optional logger
+ * @param deps.username   the bot's @username (groups: commands for other bots are ignored)
+ * @param deps.botId      the bot's user id (groups: the welcome when it is added)
  */
+
+// Groups: the same token is answered at most once every GROUP_COOLDOWN in a group, and a group gets at most
+// GROUP_MAX answers every GROUP_WINDOW, so a raid of pasted contracts can't turn the bot into spam
+export const GROUP_COOLDOWN = 30 * 60000, GROUP_WINDOW = 10 * 60000, GROUP_MAX = 8;
+const CANDIDATE = /(?<![1-9A-HJ-NP-Za-km-z])[1-9A-HJ-NP-Za-km-z]{32,44}(?![1-9A-HJ-NP-Za-km-z])/g;
+
+// Solana addresses inside any text (also inside pump.fun or DexScreener links), without repeats, at most `max`
+export function findAddresses(text, max = 3) {
+  const out = [];
+  for (const m of String(text || "").matchAll(CANDIDATE)) {
+    if (ADDRESS_RE.test(m[0]) && !out.includes(m[0])) out.push(m[0]);
+    if (out.length >= max) break;
+  }
+  return out;
+}
 export function createBot(deps) {
   const { telegram, store, scanner } = deps;
   const intervalMin = deps.intervalMin || 15, maxWatches = deps.maxWatches || 10;
   const priceMin = deps.priceMin || 2, maxPrices = deps.maxPrices || 10;
   const log = deps.log || (() => {});
   const ownRpc = () => scanner.client.ownRpc();
+  const username = (deps.username || "").toLowerCase(), botId = deps.botId;
+  const now = deps.now || Date.now;
+  const groupSeen = new Map(), groupTimes = new Map();   // in memory: "chat|mint" -> last answer · chat -> answer times
 
   async function reply(chatId, html) {
     try { await telegram.send(chatId, html); } catch (e) { log("send failed", chatId, e.message); }
@@ -171,10 +191,44 @@ export function createBot(deps) {
     return reply(chatId, lines.join("\n"));
   }
 
+  // A group: only a pasted token gets an answer (short, as a reply, with the file's preview). Wallets are ignored
+  // (they may be people's own), and so is everything else. Nothing of what people write is stored
+  async function groupScan(msg, chatId, lang) {
+    const t0 = now();
+    const recent = (groupTimes.get(chatId) || []).filter((x) => t0 - x < GROUP_WINDOW);
+    groupTimes.set(chatId, recent);
+    if (recent.length >= GROUP_MAX) return;
+    for (const addr of findAddresses(msg.text)) {
+      const key = chatId + "|" + addr, last = groupSeen.get(key);
+      if (last && t0 - last < GROUP_COOLDOWN) continue;
+      let mint = false;
+      try { mint = await isMint(scanner.client, addr); } catch (e) { log("group isMint failed", e.code || e.message); }
+      if (!mint) continue;
+      groupSeen.set(key, t0);
+      recent.push(t0);
+      try {
+        const r = await scanner.analyzeToken(addr);
+        await telegram.send(chatId, formatGroup(r, lang), { replyTo: msg.message_id, preview: fichaLink(addr, lang) });
+      } catch (e) { log("group analysis failed", addr, e.code || e.message); }
+      return;   // one token per message
+    }
+  }
+
   async function handleMessage(msg) {
-    if (!msg || !msg.chat || typeof msg.text !== "string") return;
+    if (!msg || !msg.chat) return;
     const chatId = String(msg.chat.id), chat = store.chat(chatId), lang = chat.lang;
+    const group = msg.chat.type === "group" || msg.chat.type === "supergroup";
+    // added to a group: say once what it does there
+    if (group && botId && (msg.new_chat_members || []).some((u) => u.id === botId)) return reply(chatId, t(lang).groupHelp);
+    if (typeof msg.text !== "string") return;
+    const to = (msg.text.match(/^\/[a-zA-Z_]+@(\w+)/) || [])[1];
+    if (group && to && username && to.toLowerCase() !== username) return;   // a command for another bot
     const { cmd, arg } = parse(msg.text);
+    if (group) {
+      if (cmd === null) return groupScan(msg, chatId, lang);
+      if (cmd === "unknown") return;
+      if (cmd === "help" && !arg) return reply(chatId, t(lang).groupHelp);
+    }
     const first = arg.split(/\s+/)[0] || "";
     switch (cmd) {
       case "help":
