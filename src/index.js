@@ -16,6 +16,7 @@ import { createStore } from "./store.js";
 import { createBot } from "./bot.js";
 import { syncProfile } from "./profile.js";
 import { createMovedBot, withFallback } from "./moved.js";
+import { keepIssuersFresh } from "./issuers.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -42,6 +43,8 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
 const main = createTelegram(process.env.TELEGRAM_BOT_TOKEN);
 const store = createStore(join(root, "data", "store.json"));
 const scanner = createScanner({ rpcUrl: process.env.SOLANA_RPC_URL });
+// Emisores revisados (xStocks, Circle, Ondo…): los mismos que la web, para detectar claves cambiadas
+keepIssuersFresh(log);
 
 const me = await main.call("getMe");
 // Bot antiguo (si está): solo manda a la gente al nuevo y entrega los avisos que el nuevo no puede
