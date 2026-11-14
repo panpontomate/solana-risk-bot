@@ -3,8 +3,10 @@ import { escapeHtml as esc } from "./telegram.js";
 import { t } from "./texts.js";
 
 // Signals that come and go on their own and would only make noise as alerts:
-// daily volume dips, a market getting older, a check that timed out this time
-const NOISY = new Set(["MKT_VOLUME_LOW", "MKT_NEW", "CON_UNAVAILABLE", "CON_SKIPPED", "MARKET_UNCHECKED", "NO_INFO"]);
+// daily volume dips, a market getting older, a check that timed out this time, and fake volume (engine 0.5.5:
+// measured on the last ~300 trades and GeckoTerminal sometimes does not answer, so it comes and goes between checks)
+const NOISY = new Set(["MKT_VOLUME_LOW", "MKT_NEW", "CON_UNAVAILABLE", "CON_SKIPPED", "MARKET_UNCHECKED", "NO_INFO", "MKT_FAKE_VOLUME"]);
+const WASH = "MKT_FAKE_VOLUME";
 const SEVERITY = { LOW: 1, MEDIUM: 2, HIGH: 3, SPAM: 3 };
 
 // What is remembered about a watched token between checks
@@ -13,7 +15,9 @@ export function tokenState(r) {
     lvl: r.lvl,
     sym: r.sym,
     liq: (r.pair && r.pair.liquidity && r.pair.liquidity.usd) || 0,
-    signals: (r.reasons || []).filter((x) => (x.s === "bad" || x.s === "warn") && !NOISY.has(x.code)).map((x) => ({ code: x.code, s: x.s, data: x.data }))
+    signals: (r.reasons || []).filter((x) => (x.s === "bad" || x.s === "warn") && !NOISY.has(x.code)).map((x) => ({ code: x.code, s: x.s, data: x.data })),
+    // whether fake volume was there: a level change that only comes from it appearing or going is not an alert
+    wash: (r.reasons || []).some((x) => x.code === WASH)
   };
 }
 
@@ -24,7 +28,9 @@ export function tokenState(r) {
 export function diffToken(prev, now) {
   const out = { worse: false, better: false, level: null, newSignals: [], liqDrop: null };
   const a = SEVERITY[prev.lvl], b = SEVERITY[now.lvl];
-  if (a && b && a !== b) { out.level = [prev.lvl, now.lvl]; if (b > a) out.worse = true; else out.better = true; }
+  const key = (st) => st.signals.map((x) => x.code + ":" + x.s).sort().join(",");
+  const onlyWash = !!prev.wash !== !!now.wash && key(prev) === key(now);
+  if (a && b && a !== b && !onlyWash) { out.level = [prev.lvl, now.lvl]; if (b > a) out.worse = true; else out.better = true; }
   const had = new Set(prev.signals.map((x) => x.code));
   out.newSignals = now.signals.filter((x) => !had.has(x.code));
   // a level that went down with only yellow lines new is an improvement told in other words (engine 0.4.9:

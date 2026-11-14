@@ -420,6 +420,15 @@ test("diffToken ignores noise and reports improvements", () => {
   // noisy signals never become "new signal" alerts
   const st = tokenState(tokenResult({ reasons: [{ code: "MKT_VOLUME_LOW", s: "warn" }, { code: "MKT_NEW", s: "warn" }, { code: "MKT_LIQ_LOW", s: "warn" }] }));
   assert.deepEqual(st.signals.map((x) => x.code), ["MKT_LIQ_LOW"]);
+  // fake volume comes and goes between checks: neither a new signal nor a level change on its own
+  const w0 = tokenState(tokenResult({ lvl: "MEDIUM", reasons: [{ code: "MKT_LIQ_LOW", s: "warn" }] }));
+  const w1 = tokenState(tokenResult({ lvl: "HIGH", reasons: [{ code: "MKT_LIQ_LOW", s: "warn" }, { code: "MKT_FAKE_VOLUME", s: "bad" }] }));
+  assert.deepEqual([w1.wash, w1.signals.length], [true, 1]);
+  assert.deepEqual(diffToken(w0, w1), { worse: false, better: false, level: null, newSignals: [], liqDrop: null });
+  assert.equal(diffToken(w1, w0).better, false);
+  // but a real change at the same time still counts
+  const w2 = tokenState(tokenResult({ lvl: "HIGH", reasons: [{ code: "MKT_LIQ_LOW", s: "warn" }, { code: "MKT_FAKE_VOLUME", s: "bad" }, { code: "MKT_LP_UNLOCKED", s: "bad" }] }));
+  assert.equal(diffToken(w0, w2).worse, true);
 });
 
 test("walletMoves sorts by value and handles a first snapshot", () => {
