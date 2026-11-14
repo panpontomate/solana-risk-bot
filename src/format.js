@@ -1,8 +1,12 @@
-import { explainLight, lightLabel, levelLabel, typeInfo, describe, format } from "solana-risk-engine";
+import { explainLight, lightLabel, levelLabel, tierLabel, tierNote, typeInfo, describe, format } from "solana-risk-engine";
 import { escapeHtml as esc } from "./telegram.js";
 import { t } from "./texts.js";
 
 export const LEVEL_ICON = { HIGH: "🔴", MEDIUM: "🟠", LOW: "🟢", SPAM: "⛔", NO_DATA: "⚪", NO_MARKET: "⚫" };
+// The five tiers (engine 0.6.0, 14/11): what the token is. Tokens without a market keep the old label
+export const TIER_ICON = { DIAMOND: "💎", GREEN: "🟢", YELLOW: "🟡", ORANGE: "🟠", RED: "🔴" };
+export function icon(r) { return (r.tier && TIER_ICON[r.tier]) || LEVEL_ICON[r.lvl] || ""; }
+export function label(r, lang) { return r.tier ? tierLabel(r, lang) : levelLabel(r, lang); }
 const LIGHT_ICON = { ok: "🟢", na: "⚪", warn: "🟡", bad: "🔴" };
 
 export function short(a) {
@@ -26,7 +30,8 @@ export function tokenLabel(r) {
 // One token, as returned by analyzeToken
 export function formatToken(r, lang) {
   const T = t(lang), f = format(lang);
-  const lines = [`${LEVEL_ICON[r.lvl] || ""} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(levelLabel(r, lang))}</b>`];
+  const lines = [`${icon(r)} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(label(r, lang))}</b>`];
+  if (r.tier) lines.push(`<i>${esc(tierNote(r, lang))}</i>`);
   const ti = typeInfo(r.type, lang);
   if (ti) lines.push(`<i>${esc(ti.label)}</i>`);
   lines.push("");
@@ -50,7 +55,7 @@ export function formatWallet(w, lang, maxRows = 10) {
   const shown = listed.slice(0, maxRows);
   for (const r of shown) {
     const why = r.reasons && r.reasons.find((x) => x.s === "bad") || (r.reasons || []).find((x) => x.s === "warn");
-    lines.push(`${LEVEL_ICON[r.lvl] || ""} <b>${esc(tokenLabel(r))}</b> ${f.usd(r.value || 0)} — ${esc(levelLabel(r, lang))}${why && r.lvl !== "LOW" ? ": " + esc(describe(why, lang)) : ""}`);
+    lines.push(`${icon(r)} <b>${esc(tokenLabel(r))}</b> ${f.usd(r.value || 0)} — ${esc(label(r, lang))}${why && r.lvl !== "LOW" ? ": " + esc(describe(why, lang)) : ""}`);
   }
   if (listed.length > shown.length) lines.push(T.walletRest(listed.length - shown.length));
   if (spam || nomk) lines.push("", T.walletSpam(spam, nomk));
@@ -68,7 +73,7 @@ export function fichaLink(mint, lang) {
 // what the group sees under it
 export function formatGroup(r, lang, maxSignals = 3) {
   const T = t(lang);
-  const lines = [`${LEVEL_ICON[r.lvl] || ""} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(levelLabel(r, lang))}</b>`];
+  const lines = [`${icon(r)} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(label(r, lang))}</b>`];
   const rank = { bad: 0, warn: 1 };
   const bad = (r.lights || []).filter((l) => l.s in rank).sort((a, b) => rank[a.s] - rank[b.s]).slice(0, maxSignals);
   if (bad.length) for (const l of bad) lines.push(`${LIGHT_ICON[l.s]} ${esc(explainLight(l, lang))}`);
