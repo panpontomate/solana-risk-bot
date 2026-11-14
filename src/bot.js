@@ -195,6 +195,9 @@ export function createBot(deps) {
   // (they may be people's own), and so is everything else. Nothing of what people write is stored
   async function groupScan(msg, chatId, lang) {
     const t0 = now();
+    // lo que ya no cuenta se olvida, para que la memoria no crezca con los meses
+    if (groupSeen.size > 500) for (const [k, v] of groupSeen) if (t0 - v >= GROUP_COOLDOWN) groupSeen.delete(k);
+    for (const [k, v] of groupTimes) if (k !== chatId && !v.some((x) => t0 - x < GROUP_WINDOW)) groupTimes.delete(k);
     const recent = (groupTimes.get(chatId) || []).filter((x) => t0 - x < GROUP_WINDOW);
     groupTimes.set(chatId, recent);
     if (recent.length >= GROUP_MAX) return;
