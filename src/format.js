@@ -14,6 +14,11 @@ export function webLink(addr, lang) {
   return "https://solflag.com/" + (lang === "en" ? "en/" : "") + "?token=" + addr;
 }
 
+// What each flag checks and why, on the web
+export function howLink(lang) {
+  return "https://solflag.com/" + (lang === "en" ? "en/how-it-works/" : "como-funciona/");
+}
+
 export function tokenLabel(r) {
   return r.sym && r.sym !== short(r.mint) ? "$" + r.sym : short(r.mint);
 }
@@ -30,6 +35,7 @@ export function formatToken(r, lang) {
   const links = [`<a href="https://solscan.io/token/${r.mint}">Solscan</a>`];
   if (r.pair && r.pair.pairAddress) links.unshift(`<a href="https://dexscreener.com/solana/${esc(r.pair.pairAddress)}">DexScreener</a>`);
   links.unshift(`<a href="${webLink(r.mint, lang)}">SolFlag</a>`);
+  if (r.lights) links.push(`<a href="${howLink(lang)}">${T.how}</a>`);
   lines.push("", `<code>${r.mint}</code>`, links.join(" · "));
   return lines.join("\n");
 }
