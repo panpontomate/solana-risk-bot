@@ -5,8 +5,20 @@ import { t } from "./texts.js";
 export const LEVEL_ICON = { HIGH: "🔴", MEDIUM: "🟠", LOW: "🟢", SPAM: "⛔", NO_DATA: "⚪", NO_MARKET: "⚫" };
 // The five tiers (engine 0.6.0, 14/11): what the token is. Tokens without a market keep the old label
 export const TIER_ICON = { DIAMOND: "💎", GREEN: "🟢", YELLOW: "🟡", ORANGE: "🟠", RED: "🔴" };
-export function icon(r) { return (r.tier && TIER_ICON[r.tier]) || LEVEL_ICON[r.lvl] || ""; }
-export function label(r, lang) { return r.tier ? tierLabel(r, lang) : levelLabel(r, lang); }
+// with points by section (engine 0.7.0) the tier shown is the section's, as on the web
+const tierOf = (r) => (r.perfil && r.perfil.tier) || r.tier;
+export function icon(r) { return (tierOf(r) && TIER_ICON[tierOf(r)]) || LEVEL_ICON[r.lvl] || ""; }
+export function label(r, lang) { return tierOf(r) ? tierLabel(Object.assign({}, r, { tier: tierOf(r), tierCap: r.perfil ? r.perfil.cap : r.tierCap }), lang) : levelLabel(r, lang); }
+// the bar as text: 10 blocks for 0–110 points
+export function bar(pts) { const n = Math.round(Math.max(0, Math.min(110, pts)) / 11); return "▰".repeat(n) + "▱".repeat(10 - n); }
+function perfilLines(r, T) {
+  const p = r.perfil, out = [];
+  out.push(`<i>${esc(T.ap[p.ap] || p.ap)}${p.lanz ? " · " + esc(T.lanz) : ""}</i>`);
+  if (!p.trap) out.push(`${bar(p.pts)} <b>${Math.min(110, p.pts)}</b>/110 ${T.puntos}`);
+  const rs = p.checks.filter((c) => c.col === "resta" || c.col === "grave").map((c) => T.ck[c.k]).filter(Boolean);
+  out.push(rs.length ? `➖ ${T.resta}: ${esc(rs.join(", "))}` : `➕ ${T.nadaResta}`);
+  return out;
+}
 const LIGHT_ICON = { ok: "🟢", na: "⚪", warn: "🟡", bad: "🔴" };
 
 export function short(a) {
@@ -31,7 +43,8 @@ export function tokenLabel(r) {
 export function formatToken(r, lang) {
   const T = t(lang), f = format(lang);
   const lines = [`${icon(r)} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(label(r, lang))}</b>`];
-  if (r.tier) lines.push(`<i>${esc(tierNote(r, lang))}</i>`);
+  if (r.perfil) lines.push(...perfilLines(r, T));
+  else if (r.tier) lines.push(`<i>${esc(tierNote(r, lang))}</i>`);
   const ti = typeInfo(r.type, lang);
   if (ti) lines.push(`<i>${esc(ti.label)}</i>`);
   lines.push("");
@@ -74,6 +87,7 @@ export function fichaLink(mint, lang) {
 export function formatGroup(r, lang, maxSignals = 3) {
   const T = t(lang);
   const lines = [`${icon(r)} <b>${esc(tokenLabel(r))}</b>${r.name ? " · " + esc(r.name) : ""} — <b>${esc(label(r, lang))}</b>`];
+  if (r.perfil && !r.perfil.trap) lines.push(`${bar(r.perfil.pts)} <b>${Math.min(110, r.perfil.pts)}</b>/110 · ${esc(T.ap[r.perfil.ap] || r.perfil.ap)}`);
   const rank = { bad: 0, warn: 1 };
   const bad = (r.lights || []).filter((l) => l.s in rank).sort((a, b) => rank[a.s] - rank[b.s]).slice(0, maxSignals);
   if (bad.length) for (const l of bad) lines.push(`${LIGHT_ICON[l.s]} ${esc(explainLight(l, lang))}`);

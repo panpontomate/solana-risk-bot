@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { createScanner } from "solana-risk-engine";
+import { withPerfiles } from "./perfiles.js";
 import { createTelegram } from "./telegram.js";
 import { createStore } from "./store.js";
 import { createBot } from "./bot.js";
@@ -42,7 +43,8 @@ if (!process.env.TELEGRAM_BOT_TOKEN) {
 
 const main = createTelegram(process.env.TELEGRAM_BOT_TOKEN);
 const store = createStore(join(root, "data", "store.json"));
-const scanner = createScanner({ rpcUrl: process.env.SOLANA_RPC_URL });
+// puntos por apartado (21/11): analyzeToken lleva siempre el perfil del día de la web (mismo nivel que solflag.com)
+const scanner = withPerfiles(createScanner({ rpcUrl: process.env.SOLANA_RPC_URL }));
 // Emisores revisados (xStocks, Circle, Ondo…): los mismos que la web, para detectar claves cambiadas
 keepIssuersFresh(log);
 
